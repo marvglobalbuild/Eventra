@@ -1,0 +1,6 @@
+{
+  "name": "FlyerFlow - Self-Service Event Flyer Generator SaaS",
+  "description": "Self-service event flyer generator SaaS. Organisers upload flyer designs, configure participant photo & name coordinates, and participants personalize and download high-resolution flyers in seconds.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
