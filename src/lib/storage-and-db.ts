@@ -4,12 +4,20 @@ import {
 } from '../types/database';
 import { createSampleFlyerDataUrl } from './sample-flyers';
 
-// IndexedDB database name and stores for reliable large image storage
+// In-memory fallback and fast cache for files and storage values
+const memoryFileStore = new Map<string, string>();
+const memoryKvStore = new Map<string, string>();
+
+// IndexedDB database name and stores for reliable large image storage (100MB-GBs capacity)
 const IDB_NAME = 'eventra_storage_db';
 const IDB_VERSION = 1;
 
 function openIDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      reject(new Error('IndexedDB not supported'));
+      return;
+    }
     const request = indexedDB.open(IDB_NAME, IDB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -22,7 +30,14 @@ function openIDB(): Promise<IDBDatabase> {
   });
 }
 
+/**
+ * Stores large file/image data in IndexedDB with memory cache fallback.
+ * Crucially avoids blowing through the browser's 5MB localStorage quota.
+ */
 export async function storeFileInIDB(key: string, dataUrl: string): Promise<void> {
+  // Always update fast in-memory cache
+  memoryFileStore.set(key, dataUrl);
+
   try {
     const db = await openIDB();
     const tx = db.transaction('files', 'readwrite');
@@ -32,26 +47,36 @@ export async function storeFileInIDB(key: string, dataUrl: string): Promise<void
       tx.onerror = () => reject(tx.error);
     });
   } catch (err) {
-    console.warn('IDB storage failed, falling back to memory/local', err);
-    try {
-      localStorage.setItem(`file_${key}`, dataUrl);
-    } catch {
-      // Ignore if quota exceeded
-    }
+    console.warn('[Eventra Storage] IndexedDB storage fallback to memory cache:', err);
+    // Never write huge binary/base64 files to localStorage as it causes QuotaExceededError
   }
 }
 
+/**
+ * Retrieves file/image data from memory cache or IndexedDB
+ */
 export async function getFileFromIDB(key: string): Promise<string | null> {
+  if (memoryFileStore.has(key)) {
+    return memoryFileStore.get(key)!;
+  }
+
   try {
     const db = await openIDB();
     const tx = db.transaction('files', 'readonly');
     const req = tx.objectStore('files').get(key);
     return new Promise((resolve) => {
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => resolve(localStorage.getItem(`file_${key}`));
+      req.onsuccess = () => {
+        const res = req.result || null;
+        if (res) memoryFileStore.set(key, res);
+        resolve(res);
+      };
+      req.onerror = () => {
+        const fallback = safeLocalStorageGet(`file_${key}`);
+        resolve(fallback);
+      };
     });
   } catch {
-    return localStorage.getItem(`file_${key}`);
+    return safeLocalStorageGet(`file_${key}`);
   }
 }
 
@@ -66,6 +91,79 @@ const LS_PARTICIPANTS_KEY = 'eventra_participants_list';
 const LS_DOWNLOADS_KEY = 'eventra_downloads_list';
 const LS_SUPABASE_CONFIG = 'eventra_supabase_config';
 
+/**
+ * Safe localStorage setter that intercepts QuotaExceededError and performs
+ * automatic cleanup of legacy oversized entries, so the application never crashes.
+ */
+export function safeLocalStorageSet(key: string, value: string): void {
+  memoryKvStore.set(key, value);
+
+  try {
+    localStorage.setItem(key, value);
+  } catch (err: any) {
+    console.warn(`[Eventra Storage] Quota warning while setting "${key}". Triggering auto-cleanup...`, err);
+
+    // Emergency storage cleanup to reclaim quota
+    try {
+      // 1. Purge legacy file_* keys accidentally saved in localStorage
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('file_') || k.startsWith('temp_') || k.startsWith('cache_'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+      // 2. Strip any bulky data URLs embedded inside eventra_events_list
+      const rawEvents = localStorage.getItem(LS_EVENTS_KEY);
+      if (rawEvents) {
+        try {
+          const events: FlyerEvent[] = JSON.parse(rawEvents);
+          let cleaned = false;
+          for (const ev of events) {
+            if (ev.original_flyer_data_url && ev.original_flyer_data_url.length > 300) {
+              ev.original_flyer_data_url = '';
+              cleaned = true;
+            }
+          }
+          if (cleaned) {
+            localStorage.setItem(LS_EVENTS_KEY, JSON.stringify(events));
+          }
+        } catch {}
+      }
+
+      // 3. Trim download history to latest 25 items
+      const rawDownloads = localStorage.getItem(LS_DOWNLOADS_KEY);
+      if (rawDownloads) {
+        try {
+          const dl: FlyerDownload[] = JSON.parse(rawDownloads);
+          if (dl.length > 25) {
+            localStorage.setItem(LS_DOWNLOADS_KEY, JSON.stringify(dl.slice(0, 25)));
+          }
+        } catch {}
+      }
+
+      // Retry setItem
+      localStorage.setItem(key, value);
+    } catch (retryError) {
+      console.error('[Eventra Storage] Storage still constrained; relying on session memory.', retryError);
+      // Data remains intact in memoryKvStore for seamless in-session operation
+    }
+  }
+}
+
+/**
+ * Safe localStorage getter that falls back to memory if localStorage is restricted
+ */
+export function safeLocalStorageGet(key: string): string | null {
+  try {
+    const val = localStorage.getItem(key);
+    if (val !== null) return val;
+  } catch {}
+  return memoryKvStore.get(key) || null;
+}
+
 export interface SupabaseConfig {
   url: string;
   anonKey: string;
@@ -79,7 +177,7 @@ export function getCustomSupabaseConfig(): SupabaseConfig {
     return { url: envUrl, anonKey: envKey };
   }
 
-  const stored = localStorage.getItem(LS_SUPABASE_CONFIG);
+  const stored = safeLocalStorageGet(LS_SUPABASE_CONFIG);
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
@@ -98,13 +196,45 @@ export function getCustomSupabaseConfig(): SupabaseConfig {
 }
 
 export function saveCustomSupabaseConfig(cfg: SupabaseConfig) {
-  localStorage.setItem(LS_SUPABASE_CONFIG, JSON.stringify(cfg));
+  safeLocalStorageSet(LS_SUPABASE_CONFIG, JSON.stringify(cfg));
 }
 
-// Seed initial realistic data if clean state
+// Seed initial realistic data if clean state, and perform auto-cleanup of legacy quota bloat
 export async function initializeLocalData(): Promise<void> {
+  // 0. Auto-migrate & purge legacy storage bloat to free up localStorage quota immediately
+  try {
+    const existingEventsRaw = safeLocalStorageGet(LS_EVENTS_KEY);
+    if (existingEventsRaw) {
+      const parsed: FlyerEvent[] = JSON.parse(existingEventsRaw);
+      let needsSanitize = false;
+      for (const ev of parsed) {
+        if (ev.original_flyer_data_url && ev.original_flyer_data_url.length > 500) {
+          // Preserve in IndexedDB before stripping from localStorage
+          if (ev.original_flyer_path) {
+            await storeFileInIDB(ev.original_flyer_path, ev.original_flyer_data_url);
+          }
+          ev.original_flyer_data_url = '';
+          needsSanitize = true;
+        }
+      }
+      if (needsSanitize) {
+        safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(parsed));
+      }
+    }
+
+    // Clean up any old file_* entries from localStorage
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('file_')) {
+        localStorage.removeItem(k);
+      }
+    }
+  } catch (migrationErr) {
+    console.warn('[Eventra Storage] Storage auto-migration non-fatal notice:', migrationErr);
+  }
+
   // 1. Initial User
-  if (!localStorage.getItem(LS_USER_KEY)) {
+  if (!safeLocalStorageGet(LS_USER_KEY)) {
     const defaultProfile: Profile = {
       id: 'usr_demo_482b5ca0',
       full_name: 'Alex Morgan',
@@ -113,11 +243,11 @@ export async function initializeLocalData(): Promise<void> {
       current_org_id: 'org_elevate_01',
       created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
     };
-    localStorage.setItem(LS_USER_KEY, JSON.stringify(defaultProfile));
+    safeLocalStorageSet(LS_USER_KEY, JSON.stringify(defaultProfile));
   }
 
   // 2. Initial Organisation
-  if (!localStorage.getItem(LS_ORGS_KEY)) {
+  if (!safeLocalStorageGet(LS_ORGS_KEY)) {
     const defaultOrg: Organisation = {
       id: 'org_elevate_01',
       name: 'Elevate Experience Group',
@@ -130,12 +260,12 @@ export async function initializeLocalData(): Promise<void> {
       },
       created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
     };
-    localStorage.setItem(LS_ORGS_KEY, JSON.stringify([defaultOrg]));
-    localStorage.setItem(LS_CURRENT_ORG_KEY, 'org_elevate_01');
+    safeLocalStorageSet(LS_ORGS_KEY, JSON.stringify([defaultOrg]));
+    safeLocalStorageSet(LS_CURRENT_ORG_KEY, 'org_elevate_01');
   }
 
   // 3. Initial Organisation Members
-  if (!localStorage.getItem(LS_ORG_MEMBERS_KEY)) {
+  if (!safeLocalStorageGet(LS_ORG_MEMBERS_KEY)) {
     const members: OrganisationMember[] = [
       {
         id: 'mem_01',
@@ -165,17 +295,18 @@ export async function initializeLocalData(): Promise<void> {
         joined_at: new Date(Date.now() - 5 * 86400000).toISOString(),
       },
     ];
-    localStorage.setItem(LS_ORG_MEMBERS_KEY, JSON.stringify(members));
+    safeLocalStorageSet(LS_ORG_MEMBERS_KEY, JSON.stringify(members));
   }
 
   // 4. Initial Events
-  if (!localStorage.getItem(LS_EVENTS_KEY)) {
+  if (!safeLocalStorageGet(LS_EVENTS_KEY)) {
     const techFlyerData = createSampleFlyerDataUrl('tech');
     const galaFlyerData = createSampleFlyerDataUrl('gala');
 
     const techFileKey = 'event-flyers/tech-summit-2026.jpg';
     const galaFileKey = 'event-flyers/worship-expression-2026.jpg';
 
+    // Store the binary image data safely in IndexedDB
     await storeFileInIDB(techFileKey, techFlyerData);
     await storeFileInIDB(galaFileKey, galaFlyerData);
 
@@ -187,7 +318,7 @@ export async function initializeLocalData(): Promise<void> {
         event_name: 'Next Horizon AI Summit 2026',
         slug: 'next-horizon-2026',
         original_flyer_path: techFileKey,
-        original_flyer_data_url: techFlyerData,
+        original_flyer_data_url: '', // Left blank in localStorage to keep storage tiny (<1KB)
         status: 'published',
         category: 'Technology & AI',
         venue: 'Moscone Center, San Francisco',
@@ -202,7 +333,7 @@ export async function initializeLocalData(): Promise<void> {
         event_name: 'Worship Expression Gala',
         slug: 'worship-expression-gala',
         original_flyer_path: galaFileKey,
-        original_flyer_data_url: galaFlyerData,
+        original_flyer_data_url: '', // Left blank in localStorage
         status: 'published',
         category: 'Arts & Gala',
         venue: 'Grand Symphony Hall',
@@ -290,17 +421,17 @@ export async function initializeLocalData(): Promise<void> {
       { id: 'dl_004', participant_id: 'part_003', event_id: 'ev_gala_002', format: 'png', downloaded_at: new Date().toISOString() },
     ];
 
-    localStorage.setItem(LS_EVENTS_KEY, JSON.stringify(initialEvents));
-    localStorage.setItem(LS_TEMPLATES_KEY, JSON.stringify(initialTemplates));
-    localStorage.setItem(LS_PARTICIPANTS_KEY, JSON.stringify(initialParticipants));
-    localStorage.setItem(LS_DOWNLOADS_KEY, JSON.stringify(initialDownloads));
+    safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(initialEvents));
+    safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify(initialTemplates));
+    safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify(initialParticipants));
+    safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify(initialDownloads));
   }
 }
 
 // Database helper operations
 export const db = {
   getCurrentProfile(): Profile {
-    const raw = localStorage.getItem(LS_USER_KEY);
+    const raw = safeLocalStorageGet(LS_USER_KEY);
     if (!raw) {
       const def: Profile = {
         id: 'usr_demo_482b5ca0',
@@ -310,7 +441,7 @@ export const db = {
         current_org_id: 'org_elevate_01',
         created_at: new Date().toISOString(),
       };
-      localStorage.setItem(LS_USER_KEY, JSON.stringify(def));
+      safeLocalStorageSet(LS_USER_KEY, JSON.stringify(def));
       return def;
     }
     return JSON.parse(raw);
@@ -319,18 +450,18 @@ export const db = {
   updateProfile(updates: Partial<Profile>): Profile {
     const current = this.getCurrentProfile();
     const updated = { ...current, ...updates };
-    localStorage.setItem(LS_USER_KEY, JSON.stringify(updated));
+    safeLocalStorageSet(LS_USER_KEY, JSON.stringify(updated));
     return updated;
   },
 
   getOrganisations(): Organisation[] {
-    const raw = localStorage.getItem(LS_ORGS_KEY);
+    const raw = safeLocalStorageGet(LS_ORGS_KEY);
     return raw ? JSON.parse(raw) : [];
   },
 
   getCurrentOrganisation(): Organisation {
     const orgs = this.getOrganisations();
-    const currentId = localStorage.getItem(LS_CURRENT_ORG_KEY);
+    const currentId = safeLocalStorageGet(LS_CURRENT_ORG_KEY);
     const found = orgs.find((o) => o.id === currentId);
     if (found) return found;
     if (orgs.length > 0) return orgs[0];
@@ -355,25 +486,25 @@ export const db = {
     } else {
       orgs.push(org);
     }
-    localStorage.setItem(LS_ORGS_KEY, JSON.stringify(orgs));
-    localStorage.setItem(LS_CURRENT_ORG_KEY, org.id);
+    safeLocalStorageSet(LS_ORGS_KEY, JSON.stringify(orgs));
+    safeLocalStorageSet(LS_CURRENT_ORG_KEY, org.id);
     return org;
   },
 
   setCurrentOrganisationId(orgId: string): void {
-    localStorage.setItem(LS_CURRENT_ORG_KEY, orgId);
+    safeLocalStorageSet(LS_CURRENT_ORG_KEY, orgId);
     this.updateProfile({ current_org_id: orgId });
   },
 
   getOrgMembers(orgId?: string): OrganisationMember[] {
-    const raw = localStorage.getItem(LS_ORG_MEMBERS_KEY);
+    const raw = safeLocalStorageGet(LS_ORG_MEMBERS_KEY);
     const list: OrganisationMember[] = raw ? JSON.parse(raw) : [];
     const targetOrgId = orgId || this.getCurrentOrganisation().id;
     return list.filter((m) => m.org_id === targetOrgId);
   },
 
   addOrgMember(member: Omit<OrganisationMember, 'id' | 'joined_at'>): OrganisationMember {
-    const raw = localStorage.getItem(LS_ORG_MEMBERS_KEY);
+    const raw = safeLocalStorageGet(LS_ORG_MEMBERS_KEY);
     const list: OrganisationMember[] = raw ? JSON.parse(raw) : [];
     const newMember: OrganisationMember = {
       ...member,
@@ -381,19 +512,19 @@ export const db = {
       joined_at: new Date().toISOString(),
     };
     list.push(newMember);
-    localStorage.setItem(LS_ORG_MEMBERS_KEY, JSON.stringify(list));
+    safeLocalStorageSet(LS_ORG_MEMBERS_KEY, JSON.stringify(list));
     return newMember;
   },
 
   removeOrgMember(memberId: string): void {
-    const raw = localStorage.getItem(LS_ORG_MEMBERS_KEY);
+    const raw = safeLocalStorageGet(LS_ORG_MEMBERS_KEY);
     const list: OrganisationMember[] = raw ? JSON.parse(raw) : [];
     const filtered = list.filter((m) => m.id !== memberId);
-    localStorage.setItem(LS_ORG_MEMBERS_KEY, JSON.stringify(filtered));
+    safeLocalStorageSet(LS_ORG_MEMBERS_KEY, JSON.stringify(filtered));
   },
 
   getEvents(): FlyerEvent[] {
-    const raw = localStorage.getItem(LS_EVENTS_KEY);
+    const raw = safeLocalStorageGet(LS_EVENTS_KEY);
     return raw ? JSON.parse(raw) : [];
   },
 
@@ -407,25 +538,45 @@ export const db = {
     return events.find((e) => e.slug.toLowerCase() === slug.toLowerCase()) || null;
   },
 
+  /**
+   * Saves an event while safely offloading heavy image data to IndexedDB
+   * so localStorage never exceeds its 5MB quota limit.
+   */
   saveEvent(event: FlyerEvent): FlyerEvent {
+    // If the event has image data, persist it to IndexedDB
+    if (event.original_flyer_data_url && event.original_flyer_path) {
+      storeFileInIDB(event.original_flyer_path, event.original_flyer_data_url).catch((err) => {
+        console.warn('IDB background save notice:', err);
+      });
+    }
+
     const events = this.getEvents();
     const idx = events.findIndex((e) => e.id === event.id);
+
+    // Save a lightweight version into localStorage (strips out multi-megabyte base64 dataUrl)
+    const lightweightEvent: FlyerEvent = {
+      ...event,
+      original_flyer_data_url: '', // Safely empty in localStorage; full image is in IDB/Supabase
+      updated_at: new Date().toISOString(),
+    };
+
     if (idx >= 0) {
-      events[idx] = { ...event, updated_at: new Date().toISOString() };
+      events[idx] = lightweightEvent;
     } else {
-      events.unshift(event);
+      events.unshift(lightweightEvent);
     }
-    localStorage.setItem(LS_EVENTS_KEY, JSON.stringify(events));
+
+    safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(events));
     return event;
   },
 
   deleteEvent(id: string): void {
     const events = this.getEvents().filter((e) => e.id !== id);
-    localStorage.setItem(LS_EVENTS_KEY, JSON.stringify(events));
+    safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(events));
   },
 
   getTemplates(): FlyerTemplate[] {
-    const raw = localStorage.getItem(LS_TEMPLATES_KEY);
+    const raw = safeLocalStorageGet(LS_TEMPLATES_KEY);
     return raw ? JSON.parse(raw) : [];
   },
 
@@ -442,12 +593,12 @@ export const db = {
     } else {
       tmpls.push(template);
     }
-    localStorage.setItem(LS_TEMPLATES_KEY, JSON.stringify(tmpls));
+    safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify(tmpls));
     return template;
   },
 
   getParticipants(eventId?: string): Participant[] {
-    const raw = localStorage.getItem(LS_PARTICIPANTS_KEY);
+    const raw = safeLocalStorageGet(LS_PARTICIPANTS_KEY);
     const list: Participant[] = raw ? JSON.parse(raw) : [];
     if (eventId) return list.filter((p) => p.event_id === eventId);
     return list;
@@ -456,12 +607,12 @@ export const db = {
   addParticipant(participant: Participant): Participant {
     const list = this.getParticipants();
     list.unshift(participant);
-    localStorage.setItem(LS_PARTICIPANTS_KEY, JSON.stringify(list));
+    safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify(list.slice(0, 50))); // Cap to latest 50 to prevent overflow
     return participant;
   },
 
   getDownloads(eventId?: string): FlyerDownload[] {
-    const raw = localStorage.getItem(LS_DOWNLOADS_KEY);
+    const raw = safeLocalStorageGet(LS_DOWNLOADS_KEY);
     const list: FlyerDownload[] = raw ? JSON.parse(raw) : [];
     if (eventId) return list.filter((d) => d.event_id === eventId);
     return list;
@@ -470,7 +621,7 @@ export const db = {
   recordDownload(download: FlyerDownload): FlyerDownload {
     const list = this.getDownloads();
     list.push(download);
-    localStorage.setItem(LS_DOWNLOADS_KEY, JSON.stringify(list));
+    safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify(list.slice(-50))); // Cap to latest 50
     return download;
   },
 };

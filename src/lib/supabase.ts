@@ -50,17 +50,92 @@ export async function resolveFlyerSource(originalPath: string, dataUrlFallback?:
 }
 
 /**
- * Stores a flyer image: uploads to Supabase if configured, or saves in IndexedDB
+ * Automatically optimizes images to prevent memory spikes, browser crashes,
+ * and storage quota exhaustion. Resizes large images (e.g. 12MP-48MP phone photos)
+ * down to max 2048px while maintaining crisp resolution and clarity.
+ */
+export async function optimizeAndCompressImage(
+  file: File, 
+  maxDim = 2048, 
+  quality = 0.88
+): Promise<{ dataUrl: string; blob: Blob }> {
+  // If not standard image or is SVG, fallback to basic reader
+  if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') {
+    const dataUrl = await fileToDataUrl(file);
+    return { dataUrl, blob: file };
+  }
+
+  return new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+
+      // If already small and under 600KB, read directly
+      if (width <= maxDim && height <= maxDim && file.size < 600 * 1024) {
+        fileToDataUrl(file)
+          .then((dataUrl) => resolve({ dataUrl, blob: file }))
+          .catch(() => resolve({ dataUrl: '', blob: file }));
+        return;
+      }
+
+      // Proportional downscale
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        fileToDataUrl(file).then((dataUrl) => resolve({ dataUrl, blob: file }));
+        return;
+      }
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+      const dataUrl = canvas.toDataURL(mimeType, quality);
+
+      canvas.toBlob((blob) => {
+        resolve({
+          dataUrl,
+          blob: blob || file,
+        });
+      }, mimeType, quality);
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      fileToDataUrl(file).then((dataUrl) => resolve({ dataUrl, blob: file }));
+    };
+
+    img.src = objectUrl;
+  });
+}
+
+/**
+ * Stores a flyer image: uploads compressed image to Supabase if configured, or saves in IndexedDB
  */
 export async function uploadFlyerFile(file: File, userId: string): Promise<{ path: string; dataUrl: string }> {
-  const dataUrl = await fileToDataUrl(file);
+  const { dataUrl, blob } = await optimizeAndCompressImage(file, 2048, 0.90);
   const client = getSupabase();
   const fileExt = file.name.split('.').pop() || 'jpg';
   const filePath = `${userId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
   if (client) {
     try {
-      const { error } = await client.storage.from('event-flyers').upload(filePath, file, {
+      const { error } = await client.storage.from('event-flyers').upload(filePath, blob, {
         cacheControl: '3600',
         upsert: true,
       });
@@ -73,23 +148,23 @@ export async function uploadFlyerFile(file: File, userId: string): Promise<{ pat
     }
   }
 
-  // Save to IndexedDB
+  // Save to IndexedDB (which has large quota, unlike localStorage)
   await storeFileInIDB(filePath, dataUrl);
   return { path: filePath, dataUrl };
 }
 
 /**
- * Stores a participant photo: uploads to Supabase or stores locally
+ * Stores a participant photo: uploads compressed portrait to Supabase or stores in IndexedDB
  */
 export async function uploadParticipantPhoto(file: File, eventId: string): Promise<{ path: string; dataUrl: string }> {
-  const dataUrl = await fileToDataUrl(file);
+  const { dataUrl, blob } = await optimizeAndCompressImage(file, 1600, 0.88);
   const client = getSupabase();
   const fileExt = file.name.split('.').pop() || 'jpg';
   const filePath = `${eventId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
   if (client) {
     try {
-      const { error } = await client.storage.from('participant-photos').upload(filePath, file, {
+      const { error } = await client.storage.from('participant-photos').upload(filePath, blob, {
         cacheControl: '3600',
         upsert: false,
       });
