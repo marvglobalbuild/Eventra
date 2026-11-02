@@ -33,6 +33,9 @@ export default function App() {
 
           {/* Public Participant Direct Sharing Route (No authentication required) */}
           <Route path="/e/:slug" element={<ParticipantFlyerPage />} />
+          <Route path="/event/:slug" element={<ParticipantFlyerPage />} />
+          <Route path="/flyer/:slug" element={<ParticipantFlyerPage />} />
+          <Route path="/p/:slug" element={<ParticipantFlyerPage />} />
 
           {/* Protected Organiser Workspace Routes */}
           <Route

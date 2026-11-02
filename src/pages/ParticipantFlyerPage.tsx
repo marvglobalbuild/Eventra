@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { db } from '../lib/storage-and-db';
-import { resolveFlyerSource, uploadParticipantPhoto } from '../lib/supabase';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { db, initializeLocalData } from '../lib/storage-and-db';
+import { resolveFlyerSource, uploadParticipantPhoto, getSupabase } from '../lib/supabase';
 import { FlyerEvent, FlyerTemplate, Participant } from '../types/database';
 import { 
   renderPersonalisedFlyer, 
@@ -9,21 +9,23 @@ import {
   downloadCanvasAsPDF,
   triggerFlyerCelebration 
 } from '../lib/canvas-engine';
-import { createSamplePortraitDataUrl } from '../lib/sample-flyers';
+import { createSamplePortraitDataUrl, createSampleFlyerDataUrl } from '../lib/sample-flyers';
 import { EventraLogo, EventraLogoSymbol } from '../components/EventraLogo';
 import { 
   Camera, Upload, Download, FileImage, FileText, CheckCircle2, 
-  RefreshCw, Loader2, AlertCircle, Sparkles, ArrowLeft, Shield
+  RefreshCw, Loader2, AlertCircle, Sparkles, ArrowLeft, Shield, Calendar, ChevronRight
 } from 'lucide-react';
 
 export const ParticipantFlyerPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
 
   const [event, setEvent] = useState<FlyerEvent | null>(null);
   const [template, setTemplate] = useState<FlyerTemplate | null>(null);
   const [flyerSrc, setFlyerSrc] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [availableEvents, setAvailableEvents] = useState<FlyerEvent[]>([]);
 
   // Form State
   const [fullName, setFullName] = useState('');
@@ -48,11 +50,60 @@ export const ParticipantFlyerPage: React.FC = () => {
   }, [slug]);
 
   const fetchEvent = async () => {
-    if (!slug) return;
     setLoading(true);
     setNotFound(false);
 
-    const ev = db.getEventBySlug(slug);
+    try {
+      // 1. Ensure initial local data / seed database is loaded on first visit
+      await initializeLocalData();
+    } catch (err) {
+      console.warn('initializeLocalData non-fatal error:', err);
+    }
+
+    const allEvents = db.getEvents();
+    setAvailableEvents(allEvents.filter((e) => e.status !== 'archived'));
+
+    if (!slug) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+
+    // 2. Normalize slug (remove trailing slashes, decode URI, trim)
+    const cleanSlug = decodeURIComponent(slug).replace(/\/+$/, '').trim().toLowerCase();
+
+    // 3. Search local storage first
+    let ev = db.getEventBySlug(cleanSlug);
+
+    // 4. If not exact match, search by partial slug or ID
+    if (!ev) {
+      ev = allEvents.find((e) => {
+        const s = e.slug.toLowerCase();
+        return s === cleanSlug || s.includes(cleanSlug) || cleanSlug.includes(s) || e.id === cleanSlug;
+      }) || null;
+    }
+
+    // 5. If still not found, query Supabase database
+    if (!ev) {
+      const sb = getSupabase();
+      if (sb) {
+        try {
+          const { data, error } = await sb
+            .from('events')
+            .select('*')
+            .ilike('slug', `%${cleanSlug}%`)
+            .maybeSingle();
+
+          if (data && !error) {
+            ev = data as FlyerEvent;
+            db.saveEvent(ev);
+          }
+        } catch (err) {
+          console.warn('Supabase remote event query failed:', err);
+        }
+      }
+    }
+
     if (!ev || ev.status === 'archived') {
       setNotFound(true);
       setLoading(false);
@@ -60,16 +111,62 @@ export const ParticipantFlyerPage: React.FC = () => {
     }
 
     setEvent(ev);
-    const resolved = await resolveFlyerSource(ev.original_flyer_path, ev.original_flyer_data_url);
-    setFlyerSrc(resolved);
 
-    const tmpl = db.getTemplateByEventId(ev.id);
+    // 6. Find or fetch template
+    let tmpl = db.getTemplateByEventId(ev.id);
     if (!tmpl) {
-      setNotFound(true);
-      setLoading(false);
-      return;
+      const sb = getSupabase();
+      if (sb) {
+        try {
+          const { data } = await sb
+            .from('flyer_templates')
+            .select('*')
+            .eq('event_id', ev.id)
+            .maybeSingle();
+          if (data) {
+            tmpl = data as FlyerTemplate;
+            db.saveTemplate(tmpl);
+          }
+        } catch (err) {
+          console.warn('Supabase remote template query error:', err);
+        }
+      }
+    }
+
+    // Fallback template guarantee so flyer customization never crashes
+    if (!tmpl) {
+      tmpl = {
+        id: `tmpl_${ev.id}`,
+        event_id: ev.id,
+        photo_x: 0.35,
+        photo_y: 0.28,
+        photo_width: 0.30,
+        photo_height: 0.30,
+        photo_shape: 'circle',
+        photo_crop_settings: { zoom: 1 },
+        name_x: 0.15,
+        name_y: 0.60,
+        name_width: 0.70,
+        name_height: 0.08,
+        font_family: 'Plus Jakarta Sans, sans-serif',
+        font_size: 44,
+        font_weight: '700',
+        text_color: '#FFFFFF',
+        text_alignment: 'center',
+        max_lines: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      db.saveTemplate(tmpl);
     }
     setTemplate(tmpl);
+
+    // 7. Resolve flyer image source
+    let resolved = await resolveFlyerSource(ev.original_flyer_path, ev.original_flyer_data_url);
+    if (!resolved || resolved === '') {
+      resolved = createSampleFlyerDataUrl('tech');
+    }
+    setFlyerSrc(resolved);
     setLoading(false);
   };
 
@@ -232,20 +329,60 @@ export const ParticipantFlyerPage: React.FC = () => {
 
   if (notFound || !event) {
     return (
-      <div className="min-h-screen bg-[#F8F8FC] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-12 h-12 bg-rose-100 rounded-2xl flex items-center justify-center text-rose-600 mb-4">
-          <AlertCircle className="w-6 h-6" />
+      <div className="min-h-screen bg-[#F8F8FC] flex flex-col items-center justify-center p-4 sm:p-6 text-center font-sans">
+        <div className="mb-6">
+          <EventraLogo variant="with-tagline" size="md" />
         </div>
-        <h2 className="text-lg font-bold text-[#111126]">Event Not Found</h2>
-        <p className="text-xs text-[#73738A] mt-1.5 max-w-sm">
-          This event flyer link might be inactive or removed by the organiser.
-        </p>
-        <Link
-          to="/"
-          className="mt-6 px-4 py-2 bg-[#6425E8] text-white text-xs font-semibold rounded-xl hover:bg-[#4214B8] transition interactive-btn"
-        >
-          Go to Eventra Homepage
-        </Link>
+
+        <div className="w-full max-w-md bg-white rounded-2xl border border-[#E9E8F0] p-6 sm:p-8 shadow-sm">
+          <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-600 mx-auto mb-4 border border-amber-200">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-bold text-[#111126]">Event Link Not Found</h2>
+          <p className="text-xs text-[#73738A] mt-1.5 leading-relaxed">
+            We couldn't locate an event matching <code className="bg-[#F1F3F9] px-1.5 py-0.5 rounded text-[#111126] font-mono">/e/{slug}</code>. The link may have changed or the organiser may have updated the event address.
+          </p>
+
+          {availableEvents.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-[#E9E8F0] text-left">
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-3">
+                Active Events You Can Personalise
+              </span>
+              <div className="space-y-2.5">
+                {availableEvents.slice(0, 3).map((av) => (
+                  <button
+                    key={av.id}
+                    onClick={() => navigate(`/e/${av.slug}`)}
+                    className="interactive-card w-full p-3 bg-[#F8F8FC] hover:bg-white border border-[#E9E8F0] hover:border-[#6425E8] rounded-xl text-left transition flex items-center justify-between group"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <p className="text-xs font-bold text-[#111126] truncate">{av.event_name}</p>
+                      <p className="text-[10px] text-[#73738A] truncate">{av.venue || 'Virtual & In-Person'}</p>
+                    </div>
+                    <span className="text-[10px] font-bold text-[#6425E8] shrink-0 group-hover:translate-x-0.5 transition-transform">
+                      Open Flyer →
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-6 pt-4 border-t border-[#E9E8F0] flex flex-col sm:flex-row items-center gap-2">
+            <Link
+              to="/"
+              className="interactive-btn w-full py-2.5 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-semibold rounded-xl shadow-sm transition"
+            >
+              Go to Eventra Homepage
+            </Link>
+            <Link
+              to="/dashboard"
+              className="interactive-btn w-full py-2.5 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] text-xs font-semibold rounded-xl transition"
+            >
+              Organiser Workspace
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
