@@ -6,11 +6,11 @@ import { AttendeeDashboard } from './AttendeeDashboard';
 export const Dashboard: React.FC = () => {
   const { isHost, activeView } = useAuth();
 
-  // If user has not activated Host experience, or their active view preference is 'attendee', render AttendeeDashboard
-  if (!isHost || activeView === 'attendee') {
+  // If user is purely an attendee and has not activated host mode, render AttendeeDashboard
+  if (!isHost && activeView === 'attendee') {
     return <AttendeeDashboard />;
   }
 
-  // Otherwise, render dedicated HostDashboard
+  // Otherwise, render dedicated HostDashboard with real-time flyer telemetry & analytics
   return <HostDashboard />;
 };

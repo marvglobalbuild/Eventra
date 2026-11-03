@@ -9,7 +9,7 @@ import {
 import { Navbar } from '../components/Navbar';
 import { useAuth } from '../context/AuthContext';
 import { 
-  Users, Mail, FileText, Sparkles, Settings, BarChart3, 
+  Users, Mail, FileText, Layers, Settings, BarChart3, 
   ExternalLink, Copy, Check, Plus, Search, Download, 
   Trash2, AlertCircle, CheckCircle2, XCircle, ArrowLeft,
   Share2, Eye, Shield, Globe, Lock, MessageCircle
@@ -115,7 +115,7 @@ export const ManageEvent: React.FC = () => {
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="bg-white max-w-md w-full p-8 rounded-2xl border border-[#E9E8F0] shadow-sm text-center space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center mx-auto">
-              <Sparkles className="w-6 h-6" />
+              <Layers className="w-6 h-6" />
             </div>
             <h2 className="text-xl font-bold text-[#111126]">Host Access Required</h2>
             <p className="text-xs text-[#73738A] leading-relaxed">
@@ -327,7 +327,7 @@ export const ManageEvent: React.FC = () => {
               { key: 'attendees', label: `Attendees (${registrations.length})`, icon: Users },
               { key: 'invitations', label: `Invitations (${invitations.length})`, icon: Mail },
               { key: 'form', label: 'Registration Settings', icon: FileText },
-              { key: 'create', label: 'Eventra Create (Flyer)', icon: Sparkles },
+              { key: 'create', label: 'Eventra Create (Flyer)', icon: Layers },
               { key: 'settings', label: 'Event Settings', icon: Settings },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -439,7 +439,7 @@ export const ManageEvent: React.FC = () => {
               <div className="bg-white p-6 rounded-2xl border border-[#E9E8F0] shadow-2xs space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-[#6425E8]" />
+                    <Layers className="w-5 h-5 text-[#6425E8]" />
                     <h3 className="text-sm font-bold text-[#111126]">Eventra Create Flyer Link</h3>
                   </div>
                   <span className="text-[10px] font-bold uppercase text-[#6425E8] bg-[#6425E8]/10 px-2 py-0.5 rounded-full">

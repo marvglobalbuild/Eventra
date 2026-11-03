@@ -5,8 +5,7 @@ import { FlyerEvent, EventRegistration, SavedEvent } from '../types/database';
 import { useAuth } from '../context/AuthContext';
 import { EventraLogo } from '../components/EventraLogo';
 import { 
-  Compass, Bookmark, Ticket, Calendar, MapPin, 
-  Sparkles, ArrowRight, Check, Search, Heart, 
+  Compass, Bookmark, Ticket, Calendar, MapPin, ArrowRight, Check, Search, Heart, 
   Settings, LogOut, ChevronRight, User, Shield, 
   Clock, ExternalLink, PlusCircle, CheckCircle2,
   Building2, Layers, AlertCircle, X, Menu
@@ -184,7 +183,7 @@ export const AttendeeDashboard: React.FC = () => {
                 onClick={() => setShowHostModal(true)}
                 className="px-3.5 py-1.5 bg-[#6425E8] hover:bg-[#4214B8] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
               >
-                <Sparkles className="w-3.5 h-3.5" />
+                <Layers className="w-3.5 h-3.5" />
                 <span>Become a Host</span>
               </button>
             ) : (
@@ -339,7 +338,7 @@ export const AttendeeDashboard: React.FC = () => {
           {!isHost && (
             <div className="bg-gradient-to-br from-[#4214B8] to-[#6425E8] rounded-2xl p-4 text-white shadow-xs space-y-3">
               <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
-                <Sparkles className="w-4 h-4" />
+                <Layers className="w-4 h-4" />
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-bold">Hosting an Event?</p>
@@ -497,7 +496,7 @@ export const AttendeeDashboard: React.FC = () => {
                     <span className="text-[11px] text-[#73738A]">Tailored topics</span>
                   </div>
                   <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                    <Sparkles className="w-5 h-5" />
+                    <Layers className="w-5 h-5" />
                   </div>
                 </div>
               </div>
@@ -1059,7 +1058,7 @@ export const AttendeeDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center">
-                  <Sparkles className="w-4 h-4" />
+                  <Layers className="w-4 h-4" />
                 </div>
                 <h3 className="text-base font-bold text-[#111126]">Become an Event Host</h3>
               </div>
@@ -1110,7 +1109,7 @@ export const AttendeeDashboard: React.FC = () => {
                   disabled={upgradingHost}
                   className="px-4 py-2 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Layers className="w-3.5 h-3.5" />
                   <span>{upgradingHost ? 'Activating...' : 'Activate Host Experience'}</span>
                 </button>
               </div>
