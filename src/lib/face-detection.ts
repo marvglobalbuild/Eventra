@@ -152,41 +152,28 @@ export function computeOptimalFaceFraming(
   const fX = face ? face.centerX : 0.5;
   const fY = face ? face.centerY : imgHeight > imgWidth ? 0.32 : 0.42;
 
-  // Cover scale: minimum scale needed to cover the slot
+  // Base cover scale
   const baseScale = Math.max(slotWidth / imgWidth, slotHeight / imgHeight);
 
-  // Suggested zoom: if face is small (full body/half body), zoom in slightly to frame head & shoulders
-  let suggestedZoom = 1.15;
+  // Generous initial zoom so portrait photos comfortably fill the circle with room to move left & right
+  let suggestedZoom = 1.20;
   if (face && face.boxHeight < 0.22) {
-    suggestedZoom = 1.35;
+    suggestedZoom = 1.38;
   } else if (face && face.boxHeight > 0.45) {
-    suggestedZoom = 1.05;
+    suggestedZoom = 1.10;
   }
 
   const effectiveScale = baseScale * suggestedZoom;
   const renderW = imgWidth * effectiveScale;
   const renderH = imgHeight * effectiveScale;
 
-  // Target: Place the face slightly above center of the slot (optical eye-line at 40% of slot height)
+  // Place face at eye-line (42% from top of slot, centered horizontally)
   const targetEyeLineX = slotWidth * 0.5;
   const targetEyeLineY = slotHeight * 0.42;
 
-  // Face position in rendered pixels:
-  // drawLeft + fX * renderW = targetEyeLineX  =>  drawLeft = targetEyeLineX - fX * renderW
-  let drawLeft = targetEyeLineX - fX * renderW;
-  let drawTop = targetEyeLineY - fY * renderH;
+  const drawLeft = targetEyeLineX - fX * renderW;
+  const drawTop = targetEyeLineY - fY * renderH;
 
-  // STRICT BOUNDARY CLAMP:
-  // drawLeft must be between [slotWidth - renderW, 0] so no empty gaps appear!
-  const minDrawLeft = slotWidth - renderW;
-  const maxDrawLeft = 0;
-  drawLeft = Math.min(maxDrawLeft, Math.max(minDrawLeft, drawLeft));
-
-  const minDrawTop = slotHeight - renderH;
-  const maxDrawTop = 0;
-  drawTop = Math.min(maxDrawTop, Math.max(minDrawTop, drawTop));
-
-  // Convert clamped drawLeft/drawTop to normalized panOffset (relative to centered position)
   const defaultLeft = (slotWidth - renderW) / 2;
   const defaultTop = (slotHeight - renderH) / 2;
 
@@ -196,46 +183,29 @@ export function computeOptimalFaceFraming(
   return {
     zoom: Number(suggestedZoom.toFixed(2)),
     panOffset: {
-      x: Number(panX.toFixed(4)),
-      y: Number(panY.toFixed(4)),
+      x: Number(Math.max(-0.85, Math.min(0.85, panX)).toFixed(4)),
+      y: Number(Math.max(-0.85, Math.min(0.85, panY)).toFixed(4)),
     },
     faceDetected: face !== null,
   };
 }
 
 /**
- * Clamps user pan offset during manual drag or zoom so the photo never pulls
- * away from the slot borders, keeping it 100% gap-free.
+ * Clamps user pan offset during manual drag or zoom so the photo can be moved
+ * freely to the left and right, and up and down.
  */
 export function clampPanOffset(
   panX: number,
   panY: number,
-  zoom: number,
-  imgWidth: number,
-  imgHeight: number,
-  slotWidth: number,
-  slotHeight: number
+  _zoom: number,
+  _imgWidth: number,
+  _imgHeight: number,
+  _slotWidth: number,
+  _slotHeight: number
 ): { x: number; y: number } {
-  const baseScale = Math.max(slotWidth / imgWidth, slotHeight / imgHeight);
-  const effectiveScale = baseScale * Math.max(1, zoom);
-  const renderW = imgWidth * effectiveScale;
-  const renderH = imgHeight * effectiveScale;
-
-  const defaultLeft = (slotWidth - renderW) / 2;
-  const defaultTop = (slotHeight - renderH) / 2;
-
-  let drawLeft = defaultLeft + panX * slotWidth;
-  let drawTop = defaultTop + panY * slotHeight;
-
-  // Clamp within boundaries
-  const minLeft = slotWidth - renderW;
-  const minTop = slotHeight - renderH;
-
-  drawLeft = Math.min(0, Math.max(minLeft, drawLeft));
-  drawTop = Math.min(0, Math.max(minTop, drawTop));
-
-  const clampedX = slotWidth > 0 ? (drawLeft - defaultLeft) / slotWidth : 0;
-  const clampedY = slotHeight > 0 ? (drawTop - defaultTop) / slotHeight : 0;
+  // Allow full, responsive movement left and right (up to 85% of slot width)
+  const clampedX = Math.max(-0.85, Math.min(0.85, panX));
+  const clampedY = Math.max(-0.85, Math.min(0.85, panY));
 
   return {
     x: Number(clampedX.toFixed(4)),

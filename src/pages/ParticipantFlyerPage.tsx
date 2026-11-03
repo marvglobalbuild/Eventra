@@ -46,8 +46,8 @@ export const ParticipantFlyerPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [autoFramedBadge, setAutoFramedBadge] = useState<string | null>(null);
 
-  // Photo Framing & Zoom Controls (1:1 WYSIWYG parity with Canvas engine)
-  const [zoom, setZoom] = useState<number>(1.0);
+  // Photo Framing & Zoom Controls (Fluid 2D Panning left/right/up/down)
+  const [zoom, setZoom] = useState<number>(1.2);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
 
@@ -106,7 +106,7 @@ export const ParticipantFlyerPage: React.FC = () => {
     return () => ro.disconnect();
   }, [photoPreviewUrl, flyerRenderDim, template]);
 
-  // Pointer event handlers with capture for smooth drag on mouse and mobile touch
+  // Pointer event handlers with capture for smooth drag left, right, up, down on mouse & mobile touch
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     try {
@@ -128,13 +128,14 @@ export const ParticipantFlyerPage: React.FC = () => {
     const dx = e.clientX - dragStartRef.current.startX;
     const dy = e.clientY - dragStartRef.current.startY;
 
-    const unconstrainedPanX = dragStartRef.current.origPanX + dx / sW;
-    const unconstrainedPanY = dragStartRef.current.origPanY + dy / sH;
+    // Direct, highly responsive movement left and right
+    const newPanX = dragStartRef.current.origPanX + dx / sW;
+    const newPanY = dragStartRef.current.origPanY + dy / sH;
 
-    // Strict boundary clamping so the photo NEVER leaves any empty space inside the slot
+    // Generous movement bounds so user can pan freely across the slot
     const clamped = clampPanOffset(
-      unconstrainedPanX,
-      unconstrainedPanY,
+      newPanX,
+      newPanY,
       zoom,
       photoNaturalDim.width,
       photoNaturalDim.height,
@@ -152,23 +153,9 @@ export const ParticipantFlyerPage: React.FC = () => {
     setIsDraggingPhoto(false);
   };
 
-  // When zoom changes, re-clamp the pan offset so edges remain strictly inside boundaries
   const handleZoomChange = (newZoom: number) => {
     const clampedZoom = Math.max(1.0, Math.min(2.8, Number(newZoom.toFixed(2))));
     setZoom(clampedZoom);
-
-    const sW = slotDim.width || 140;
-    const sH = slotDim.height || 140;
-    const clamped = clampPanOffset(
-      panOffset.x,
-      panOffset.y,
-      clampedZoom,
-      photoNaturalDim.width,
-      photoNaturalDim.height,
-      sW,
-      sH
-    );
-    setPanOffset(clamped);
   };
 
   useEffect(() => {
@@ -263,7 +250,6 @@ export const ParticipantFlyerPage: React.FC = () => {
     }
 
     if (!tmpl) {
-      // Default clean template with exact coordinates
       tmpl = {
         id: `tmpl_${ev.id}`,
         event_id: ev.id,
@@ -336,12 +322,12 @@ export const ParticipantFlyerPage: React.FC = () => {
       setPanOffset(framing.panOffset);
 
       if (framing.faceDetected) {
-        setAutoFramedBadge('Face automatically detected & framed!');
+        setAutoFramedBadge('Face detected & centered! Drag to move left or right');
       } else {
-        setAutoFramedBadge('Photo centered to fill frame perfectly');
+        setAutoFramedBadge('Photo centered! Drag to move left or right');
       }
 
-      setTimeout(() => setAutoFramedBadge(null), 3500);
+      setTimeout(() => setAutoFramedBadge(null), 4000);
     };
     img.src = objectUrl;
   };
@@ -404,21 +390,21 @@ export const ParticipantFlyerPage: React.FC = () => {
 
     setGenerating(true);
     setErrorMessage(null);
-    setGenerationStep('Preparing high-resolution photograph...');
+    setGenerationStep('Processing photograph...');
     setGenerationProgress(25);
 
     try {
-      await new Promise((r) => setTimeout(r, 120));
+      await new Promise((r) => setTimeout(r, 100));
 
       let photoPath = 'sample-portrait';
       if (photoFile) {
-        setGenerationStep('Optimizing image clarity...');
+        setGenerationStep('Optimizing photo clarity...');
         setGenerationProgress(50);
         const uploadRes = await uploadParticipantPhoto(photoFile, event.id);
         photoPath = uploadRes.path;
       }
 
-      setGenerationStep('Locking exact coordinates...');
+      setGenerationStep('Aligning coordinates...');
       setGenerationProgress(75);
       const newParticipant: Participant = {
         id: `part_${Date.now()}`,
@@ -433,7 +419,7 @@ export const ParticipantFlyerPage: React.FC = () => {
       setGenerationStep('Rendering ultra high-res print flyer...');
       setGenerationProgress(90);
 
-      // Render 100% pixel-perfect flyer with exact same clamped coordinates
+      // Render 100% pixel-perfect flyer with exact same coordinates & user offsets
       const canvas = await renderPersonalisedFlyer({
         flyerImageUrl: flyerSrc,
         participantImageUrl: photoPreviewUrl,
@@ -448,7 +434,7 @@ export const ParticipantFlyerPage: React.FC = () => {
       });
 
       setGenerationProgress(100);
-      await new Promise((r) => setTimeout(r, 150));
+      await new Promise((r) => setTimeout(r, 120));
 
       setGeneratedCanvas(canvas);
       setResultImageUrl(canvas.toDataURL('image/jpeg', 0.95));
@@ -496,7 +482,7 @@ export const ParticipantFlyerPage: React.FC = () => {
     setPhotoPreviewUrl(null);
     setErrorMessage(null);
     setPanOffset({ x: 0, y: 0 });
-    setZoom(1.0);
+    setZoom(1.2);
   };
 
   if (loading) {
@@ -568,24 +554,23 @@ export const ParticipantFlyerPage: React.FC = () => {
     );
   }
 
-  // Text color resolution
   const resolvedTextColor = template?.text_color || '#111126';
 
   return (
-    <div className="min-h-screen bg-[#F8F8FC] py-8 px-4 sm:px-6 flex flex-col items-center justify-center font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8]">
+    <div className="min-h-screen bg-[#F8F8FC] py-0 sm:py-8 px-0 sm:px-4 flex flex-col items-center justify-start sm:justify-center font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8] overflow-x-hidden w-full">
       {/* Brand Header */}
-      <div className="mb-6 flex flex-col items-center">
+      <div className="py-2.5 px-4 sm:mb-6 sm:p-0 flex flex-col items-center shrink-0">
         <EventraLogo variant="with-tagline" size="md" />
       </div>
 
-      {/* Main Card Container */}
-      <div className="w-full max-w-lg bg-white rounded-2xl border border-[#E9E8F0] shadow-sm overflow-hidden flex flex-col relative">
+      {/* Main Card Container: Edge-to-edge on mobile with ZERO border gaps */}
+      <div className="w-full max-w-lg bg-white sm:rounded-2xl border-0 sm:border border-[#E9E8F0] sm:shadow-sm flex flex-col relative overflow-hidden min-h-screen sm:min-h-0">
         {/* Event Header Banner */}
-        <div className="p-5 sm:p-6 border-b border-[#E9E8F0] text-center bg-white relative">
+        <div className="p-4 sm:p-6 border-b border-[#E9E8F0] text-center bg-white relative">
           <span className="text-[10px] font-bold uppercase tracking-wider text-[#6425E8] bg-[#6425E8]/10 px-3 py-1 rounded-full">
             Attendee Flyer Creator
           </span>
-          <h1 className="text-xl font-bold text-[#111126] mt-2.5 leading-snug">{event.event_name}</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-[#111126] mt-2 leading-snug">{event.event_name}</h1>
           <p className="text-xs text-[#73738A] mt-1">
             Add your name and photograph to generate your custom flyer.
           </p>
@@ -593,7 +578,7 @@ export const ParticipantFlyerPage: React.FC = () => {
 
         {/* Form OR Result View */}
         {!resultImageUrl ? (
-          <form onSubmit={handleGenerate} className="p-5 sm:p-6 space-y-5">
+          <form onSubmit={handleGenerate} className="p-3 sm:p-6 space-y-4 sm:space-y-5">
             {errorMessage && (
               <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center space-x-2 animate-scale-up">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -602,7 +587,7 @@ export const ParticipantFlyerPage: React.FC = () => {
             )}
 
             {/* Step 1: Full Name Input */}
-            <div>
+            <div className="px-1 sm:px-0">
               <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5 flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-[#6425E8]" />
                 <span>Your Full Name</span>
@@ -614,12 +599,12 @@ export const ParticipantFlyerPage: React.FC = () => {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="e.g. John Amah"
-                className="w-full px-4 py-2.5 bg-white border border-[#E9E8F0] rounded-xl text-sm font-semibold text-[#111126] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition"
+                className="w-full px-4 py-2.5 bg-white border border-[#E9E8F0] rounded-xl text-sm font-semibold text-[#111126] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition shadow-2xs"
               />
             </div>
 
             {/* Step 2: Photograph Upload & Seamless Automated Face Framing */}
-            <div>
+            <div className="px-1 sm:px-0">
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-[#73738A] flex items-center gap-1.5">
                   <Camera className="w-3.5 h-3.5 text-[#6425E8]" />
@@ -662,23 +647,23 @@ export const ParticipantFlyerPage: React.FC = () => {
                   <span className="text-sm font-bold text-[#111126]">
                     {isDraggingOver ? 'Drop photograph to upload' : 'Click or tap to upload photo'}
                   </span>
-                  <span className="text-[11px] text-[#73738A] mt-1">
+                  <span className="text-[11px] text-[#73738A] mt-1 text-center">
                     System automatically detects your face & frames it perfectly
                   </span>
                 </div>
               ) : (
-                <div className="space-y-3.5">
-                  {/* Photo Header info */}
-                  <div className="flex items-center justify-between px-1">
+                <div className="space-y-3">
+                  {/* Photo Action & Status Bar */}
+                  <div className="flex items-center justify-between px-0.5">
                     {autoFramedBadge ? (
-                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 animate-scale-up">
-                        <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>{autoFramedBadge}</span>
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 animate-scale-up truncate">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span className="truncate">{autoFramedBadge}</span>
                       </span>
                     ) : (
                       <span className="text-[11px] font-bold text-[#73738A] uppercase tracking-wider flex items-center gap-1.5">
                         <Move className="w-3.5 h-3.5 text-[#6425E8]" />
-                        <span>Drag photo to nudge · Zoom to fill</span>
+                        <span>Drag photo left/right · Zoom to fill</span>
                       </span>
                     )}
 
@@ -686,25 +671,25 @@ export const ParticipantFlyerPage: React.FC = () => {
                       type="button"
                       disabled={generating}
                       onClick={() => fileInputRef.current?.click()}
-                      className="text-xs font-semibold text-[#6425E8] hover:underline"
+                      className="text-xs font-semibold text-[#6425E8] hover:underline shrink-0 ml-2"
                     >
                       Change photo
                     </button>
                   </div>
 
-                  {/* 100% WYSIWYG Flyer Live Preview Box */}
-                  <div className="w-full flex items-center justify-center bg-slate-950/5 rounded-2xl p-2 sm:p-3 border border-[#E9E8F0]">
-                    <div className="relative inline-block max-w-full overflow-hidden rounded-xl shadow-lg border border-[#E9E8F0] select-none touch-none bg-slate-900">
-                      {/* Base Flyer Image */}
+                  {/* 100% Edge-to-Edge Full-Bleed Flyer Live Preview Box */}
+                  <div className="w-full flex items-center justify-center bg-slate-950/5 p-0 sm:p-2 sm:rounded-2xl sm:border border-[#E9E8F0] overflow-hidden">
+                    <div className="relative inline-block w-full max-w-full overflow-hidden sm:rounded-xl shadow-md sm:shadow-lg border-0 sm:border border-[#E9E8F0] select-none touch-none bg-slate-900">
+                      {/* Base Flyer Image: stretches edge-to-edge full width without border space */}
                       <img
                         ref={flyerImgRef}
                         src={flyerSrc}
                         alt="Event Flyer"
                         onLoad={updateFlyerDimensions}
-                        className="block max-h-[460px] w-auto max-w-full h-auto mx-auto select-none pointer-events-none"
+                        className="w-full h-auto block select-none pointer-events-none mx-auto"
                       />
 
-                      {/* Overlaid Photo Frame positioned with 1:1 mathematical match to Template & Canvas */}
+                      {/* Overlaid Photo Slot positioned with 1:1 mathematical match to Template & Canvas */}
                       {template && (
                         <div
                           ref={photoSlotRef}
@@ -723,7 +708,7 @@ export const ParticipantFlyerPage: React.FC = () => {
                             overflow: 'hidden',
                           }}
                           className="cursor-grab active:cursor-grabbing z-10 touch-none shadow-sm ring-1 ring-white/20"
-                          title="Drag directly on your photo to adjust face framing"
+                          title="Drag directly on your photo to move left, right, up, down"
                         >
                           {(() => {
                             const sW = slotDim.width || 140;
@@ -739,14 +724,9 @@ export const ParticipantFlyerPage: React.FC = () => {
                             const defaultLeft = (sW - renderW) / 2;
                             const defaultTop = (sH - renderH) / 2;
 
-                            const minDrawLeft = sW - renderW;
-                            const minDrawTop = sH - renderH;
-
-                            const rawLeft = defaultLeft + panOffset.x * sW;
-                            const rawTop = defaultTop + panOffset.y * sH;
-
-                            const clampedLeft = Math.min(0, Math.max(minDrawLeft, rawLeft));
-                            const clampedTestTop = Math.min(0, Math.max(minDrawTop, rawTop));
+                            // Direct fluid horizontal & vertical positioning
+                            const imgLeft = defaultLeft + panOffset.x * sW;
+                            const imgTop = defaultTop + panOffset.y * sH;
 
                             return (
                               <img
@@ -757,8 +737,8 @@ export const ParticipantFlyerPage: React.FC = () => {
                                   position: 'absolute',
                                   width: `${renderW}px`,
                                   height: `${renderH}px`,
-                                  left: `${clampedLeft}px`,
-                                  top: `${clampedTestTop}px`,
+                                  left: `${imgLeft}px`,
+                                  top: `${imgTop}px`,
                                   maxWidth: 'none',
                                   maxHeight: 'none',
                                   pointerEvents: 'none',
@@ -770,7 +750,7 @@ export const ParticipantFlyerPage: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Participant Name Preview aligned vertically and horizontally in configured box */}
+                      {/* Participant Name Preview aligned in designated name box */}
                       {template && (
                         <div
                           style={{
@@ -788,7 +768,7 @@ export const ParticipantFlyerPage: React.FC = () => {
                                 ? 'flex-end'
                                 : 'center',
                           }}
-                          className="pointer-events-none select-none z-10 px-2"
+                          className="pointer-events-none select-none z-10 px-1 sm:px-2"
                         >
                           <span
                             style={{
@@ -811,14 +791,15 @@ export const ParticipantFlyerPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Clean, Frictionless Zoom & Framing Adjustment Bar */}
-                  <div className="bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl p-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-[#111126] shrink-0">
+                  {/* Clean Zoom Slider & Horizontal Panning Controls */}
+                  <div className="bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl p-2.5 sm:p-3 flex items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-1 text-xs font-bold text-[#111126] shrink-0">
                       <ZoomIn className="w-3.5 h-3.5 text-[#6425E8]" />
-                      <span>Zoom to Fill</span>
+                      <span className="hidden sm:inline">Zoom to Fill</span>
+                      <span className="sm:hidden text-[11px]">Zoom</span>
                     </div>
 
-                    <div className="flex items-center gap-2 flex-1 max-w-xs">
+                    <div className="flex items-center gap-1.5 flex-1 max-w-xs">
                       <button
                         type="button"
                         onClick={() => handleZoomChange(zoom - 0.15)}
@@ -851,7 +832,6 @@ export const ParticipantFlyerPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        // Re-trigger auto face centering
                         if (photoPreviewUrl) {
                           const img = new Image();
                           img.onload = async () => {
@@ -867,7 +847,7 @@ export const ParticipantFlyerPage: React.FC = () => {
                           img.src = photoPreviewUrl;
                         }
                       }}
-                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white border border-[#E9E8F0] hover:border-[#6425E8] text-[#73738A] hover:text-[#111126] flex items-center gap-1 transition shadow-2xs shrink-0"
+                      className="px-2 py-1 text-[11px] font-bold rounded-lg bg-white border border-[#E9E8F0] hover:border-[#6425E8] text-[#73738A] hover:text-[#111126] flex items-center gap-1 transition shadow-2xs shrink-0"
                     >
                       <RotateCcw className="w-3 h-3 text-[#6425E8]" />
                       <span>Re-center</span>
@@ -897,25 +877,27 @@ export const ParticipantFlyerPage: React.FC = () => {
             )}
 
             {/* Primary Action Button */}
-            <button
-              type="submit"
-              disabled={generating}
-              className="interactive-btn w-full py-3 bg-[#6425E8] hover:bg-[#4214B8] text-white font-semibold text-xs rounded-xl shadow-sm transition flex items-center justify-center space-x-2 animate-pulse-glow"
-            >
-              {generating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Generating Ultra High-Res Flyer...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Generate My Official Flyer</span>
-                </>
-              )}
-            </button>
+            <div className="px-1 sm:px-0">
+              <button
+                type="submit"
+                disabled={generating}
+                className="interactive-btn w-full py-3.5 bg-[#6425E8] hover:bg-[#4214B8] text-white font-semibold text-xs sm:text-sm rounded-xl shadow-sm transition flex items-center justify-center space-x-2 animate-pulse-glow"
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Generating Ultra High-Res Flyer...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Generate My Official Flyer</span>
+                  </>
+                )}
+              </button>
+            </div>
 
-            <div className="text-center">
+            <div className="text-center pb-4 sm:pb-0">
               <span className="text-[11px] text-[#73738A]">
                 Instant high-resolution download · Ready in seconds
               </span>
@@ -923,15 +905,15 @@ export const ParticipantFlyerPage: React.FC = () => {
           </form>
         ) : (
           /* Result Screen */
-          <div className="p-5 sm:p-6 space-y-5 animate-scale-up">
+          <div className="p-3 sm:p-6 space-y-4 sm:space-y-5 animate-scale-up">
             <div className="text-center">
               <div className="inline-flex items-center space-x-1.5 text-emerald-700 text-xs font-bold mb-3 bg-emerald-50 px-3.5 py-1.5 rounded-full border border-emerald-200">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 <span>Your Personalised Flyer is Ready!</span>
               </div>
 
-              {/* Generated Flyer Preview */}
-              <div className="rounded-xl overflow-hidden shadow-xl border border-[#E9E8F0] bg-black/5 relative group max-w-sm mx-auto">
+              {/* Generated Flyer Preview: Full width on mobile without side borders */}
+              <div className="w-full sm:max-w-md mx-auto overflow-hidden sm:rounded-xl shadow-md sm:shadow-xl border-0 sm:border border-[#E9E8F0] bg-black/5 relative group">
                 <img
                   src={resultImageUrl}
                   alt="Personalised Flyer"
@@ -941,7 +923,7 @@ export const ParticipantFlyerPage: React.FC = () => {
             </div>
 
             {/* Download Options */}
-            <div>
+            <div className="px-1 sm:px-0">
               <span className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] text-center mb-2.5">
                 Download Format
               </span>
@@ -957,7 +939,7 @@ export const ParticipantFlyerPage: React.FC = () => {
 
                 <button
                   onClick={() => handleDownload('jpg')}
-                  className="interactive-btn py-2.5 px-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] rounded-xl text-xs font-semibold flex flex-col items-center justify-center space-y-1 transition"
+                  className="interactive-btn py-2.5 px-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] rounded-xl text-xs font-semibold flex flex-col items-center justify-center space-y-1 transition shadow-2xs"
                 >
                   <FileImage className="w-4 h-4" />
                   <span>{downloadingFormat === 'jpg' ? 'Downloaded!' : 'JPG'}</span>
@@ -965,16 +947,16 @@ export const ParticipantFlyerPage: React.FC = () => {
 
                 <button
                   onClick={() => handleDownload('pdf')}
-                  className="interactive-btn py-2.5 px-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] rounded-xl text-xs font-semibold flex flex-col items-center justify-center space-y-1 transition"
+                  className="interactive-btn py-2.5 px-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] rounded-xl text-xs font-semibold flex flex-col items-center justify-center space-y-1 transition shadow-2xs"
                 >
                   <FileText className="w-4 h-4" />
-                  <span>{downloadingFormat === 'pdf' ? 'Downloaded!' : 'PDF Document'}</span>
+                  <span>{downloadingFormat === 'pdf' ? 'Downloaded!' : 'PDF'}</span>
                 </button>
               </div>
             </div>
 
             {/* Generate Another Option */}
-            <div className="pt-3 border-t border-[#E9E8F0] text-center">
+            <div className="pt-2 sm:pt-3 border-t border-[#E9E8F0] text-center pb-4 sm:pb-0">
               <button
                 onClick={handleReset}
                 className="interactive-btn text-xs font-medium text-[#73738A] hover:text-[#111126] inline-flex items-center space-x-1.5 py-1.5 transition"
@@ -988,7 +970,7 @@ export const ParticipantFlyerPage: React.FC = () => {
       </div>
 
       {/* Clean Footer */}
-      <div className="mt-6 text-center text-[11px] text-[#73738A] flex items-center space-x-2">
+      <div className="my-4 text-center text-[11px] text-[#73738A] flex items-center space-x-2 shrink-0">
         <span>Powered by Eventra Create</span>
         <span>·</span>
         <span className="text-[#6425E8] font-semibold">Events. Elevated.</span>

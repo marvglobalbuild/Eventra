@@ -71,17 +71,10 @@ export function drawImageCoverWithCrop(
   const defaultLeft = (targetW - renderW) / 2;
   const defaultTop = (targetH - renderH) / 2;
 
-  // Strict boundary clamping: the image edges must NEVER retract inside targetW / targetH
-  const minDrawLeft = targetW - renderW;
-  const minDrawTop = targetH - renderH;
+  const drawX = targetX + defaultLeft + offsetX * targetW;
+  const drawY = targetY + defaultTop + offsetY * targetH;
 
-  const rawLeft = defaultLeft + offsetX * targetW;
-  const rawTop = defaultTop + offsetY * targetH;
-
-  const clampedDrawLeft = Math.min(0, Math.max(minDrawLeft, rawLeft));
-  const clampedDrawTop = Math.min(0, Math.max(minDrawTop, rawTop));
-
-  ctx.drawImage(img, targetX + clampedDrawLeft, targetY + clampedDrawTop, renderW, renderH);
+  ctx.drawImage(img, drawX, drawY, renderW, renderH);
 }
 
 /**
