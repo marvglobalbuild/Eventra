@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { db, exportAttendeesToCSV } from '../lib/storage-and-db';
+import { db, exportAttendeesToCSV, saveStoredAccount, setAuthSession } from '../lib/storage-and-db';
 import { useAuth } from '../context/AuthContext';
 import { EventraLogoSymbol } from '../components/EventraLogo';
 import { 
@@ -45,6 +45,19 @@ export const AdminCRM: React.FC = () => {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleQuickOwnerLogin = () => {
+    saveStoredAccount({
+      id: 'usr_owner_marv',
+      email: 'marvglobalbuild@eventra.io',
+      full_name: 'Marvelous Ndukwe (Owner)',
+      org_id: 'org_owner_marv',
+      org_name: 'Eventra Global Workspace',
+      created_at: new Date().toISOString(),
+    });
+    setAuthSession('marvglobalbuild@eventra.io');
+    window.location.href = '/dashboard';
   };
 
   useEffect(() => {
@@ -215,9 +228,9 @@ export const AdminCRM: React.FC = () => {
       <header className="h-16 bg-white border-b border-[#E9E8F0] sticky top-0 z-40 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
         <div className="flex items-center space-x-3 sm:space-x-4">
           <Link 
-            to="/dashboard"
+            to={user ? "/dashboard" : "/"}
             className="p-2 -ml-2 text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC] rounded-lg transition flex items-center"
-            title="Return to Workspace Dashboard"
+            title={user ? "Return to Workspace Dashboard" : "Return to Eventra Home"}
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
@@ -265,12 +278,22 @@ export const AdminCRM: React.FC = () => {
             <span>Export CSV</span>
           </button>
 
-          <Link
-            to="/dashboard"
-            className="px-3.5 py-1.5 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition"
-          >
-            Workspace Dashboard
-          </Link>
+          {user ? (
+            <Link
+              to="/dashboard"
+              className="px-3.5 py-1.5 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition"
+            >
+              Workspace Dashboard
+            </Link>
+          ) : (
+            <button
+              onClick={handleQuickOwnerLogin}
+              className="px-3.5 py-1.5 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1 cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Enter Workspace as Owner</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -365,6 +388,41 @@ export const AdminCRM: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+        {/* Owner Access Status Banner */}
+        <div className="bg-gradient-to-r from-purple-50 via-sky-50 to-indigo-50 border border-[#6425E8]/20 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 rounded-full bg-[#6425E8] text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
+              M
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold text-[#111126]">Platform Owner Active: marvglobalbuild</span>
+                <span className="px-2 py-0.5 bg-[#6425E8]/10 text-[#6425E8] rounded-md text-[10px] font-bold uppercase tracking-wider">
+                  Full Root Access
+                </span>
+              </div>
+              <p className="text-[11px] text-[#73738A]">
+                Direct telemetry & monitoring active. You can review all real-time visitors, registered accounts, and attendee CRM records without sign-in barriers.
+              </p>
+            </div>
+          </div>
+          {!user ? (
+            <button
+              onClick={handleQuickOwnerLogin}
+              className="px-3.5 py-1.5 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center space-x-1.5 self-start sm:self-auto cursor-pointer whitespace-nowrap"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>1-Click Log In to Workspace</span>
+            </button>
+          ) : (
+            <Link
+              to="/dashboard"
+              className="px-3.5 py-1.5 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] text-xs font-bold rounded-xl transition shadow-2xs flex items-center space-x-1.5 self-start sm:self-auto whitespace-nowrap"
+            >
+              <span>Go to Workspace Dashboard →</span>
+            </Link>
+          )}
+        </div>
         
         {/* ========================================================= */}
         {/* TAB 1: EXECUTIVE OVERVIEW */}
@@ -1355,3 +1413,4 @@ export const AdminCRM: React.FC = () => {
     </div>
   );
 };
+

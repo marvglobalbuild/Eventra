@@ -96,39 +96,11 @@ export default function App() {
             }
           />
 
-          {/* Dedicated Platform Owner CMS / CRM & Telemetry Hub */}
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute>
-                <AdminCRM />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/crm"
-            element={
-              <ProtectedRoute>
-                <AdminCRM />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dashboard/admin"
-            element={
-              <ProtectedRoute>
-                <AdminCRM />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dashboard/crm"
-            element={
-              <ProtectedRoute>
-                <AdminCRM />
-              </ProtectedRoute>
-            }
-          />
+          {/* Dedicated Platform Owner CMS / CRM & Telemetry Hub (Directly accessible to the platform owner) */}
+          <Route path="/admin" element={<AdminCRM />} />
+          <Route path="/crm" element={<AdminCRM />} />
+          <Route path="/dashboard/admin" element={<AdminCRM />} />
+          <Route path="/dashboard/crm" element={<AdminCRM />} />
 
           {/* Catch-all redirect to Home */}
           <Route path="*" element={<Navigate to="/" replace />} />

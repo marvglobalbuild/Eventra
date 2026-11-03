@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../lib/storage-and-db';
+import { db, saveStoredAccount, setAuthSession } from '../lib/storage-and-db';
 import { EventraLogo } from '../components/EventraLogo';
 import { 
   Loader2, AlertCircle, Eye, EyeOff, 
-  ArrowLeft, Building, Mail, Lock, User
+  ArrowLeft, Building, Mail, Lock, User, Sparkles
 } from 'lucide-react';
 
 export const Login: React.FC = () => {
@@ -36,6 +36,19 @@ const AuthContainer: React.FC<AuthContainerProps> = ({ initialMode }) => {
   useEffect(() => {
     db.recordVisit(window.location.pathname);
   }, []);
+
+  const handleOwnerSignIn = () => {
+    saveStoredAccount({
+      id: 'usr_owner_marv',
+      email: 'marvglobalbuild@eventra.io',
+      full_name: 'Marvelous Ndukwe (Owner)',
+      org_id: 'org_owner_marv',
+      org_name: 'Eventra Global Workspace',
+      created_at: new Date().toISOString(),
+    });
+    setAuthSession('marvglobalbuild@eventra.io');
+    window.location.href = '/admin';
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +93,23 @@ const AuthContainer: React.FC<AuthContainerProps> = ({ initialMode }) => {
       </div>
 
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">
+        {/* Software Owner Portal Link */}
+        <div className="mb-4 bg-gradient-to-r from-purple-50 via-sky-50 to-indigo-50 border border-[#6425E8]/20 rounded-2xl p-3.5 flex items-center justify-between shadow-2xs">
+          <div className="flex items-center space-x-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <div className="text-left">
+              <span className="text-xs font-bold text-[#111126] block">Platform Owner (marvglobalbuild)?</span>
+              <span className="text-[11px] text-[#73738A]">View live visitors, users & CRM directly</span>
+            </div>
+          </div>
+          <Link
+            to="/admin"
+            className="px-3.5 py-1.5 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-bold rounded-xl shadow-xs transition whitespace-nowrap"
+          >
+            Open CMS & CRM →
+          </Link>
+        </div>
+
         <div className="bg-white py-8 px-6 shadow-xs border border-[#E9E8F0] rounded-2xl sm:px-10">
           {/* Mode Switcher Tabs */}
           <div className="flex bg-[#F8F8FC] p-1 rounded-xl mb-6 border border-[#E9E8F0]">
@@ -252,6 +282,18 @@ const AuthContainer: React.FC<AuthContainerProps> = ({ initialMode }) => {
                 </button>
               </p>
             )}
+          </div>
+
+          {/* Platform Owner 1-Click Access */}
+          <div className="mt-4 pt-4 border-t border-[#E9E8F0]">
+            <button
+              type="button"
+              onClick={handleOwnerSignIn}
+              className="w-full py-2 px-3 bg-[#6425E8]/10 hover:bg-[#6425E8]/20 text-[#6425E8] border border-[#6425E8]/20 text-xs font-bold rounded-xl transition flex items-center justify-center space-x-1.5 cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>1-Click Owner Sign In (marvglobalbuild)</span>
+            </button>
           </div>
         </div>
 
