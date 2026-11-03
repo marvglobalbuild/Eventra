@@ -16,11 +16,10 @@ import {
   clampPanOffset 
 } from '../lib/face-detection';
 import { createSamplePortraitDataUrl, createSampleFlyerDataUrl } from '../lib/sample-flyers';
-import { EventraLogo } from '../components/EventraLogo';
 import { Navbar } from '../components/Navbar';
 import { 
   Camera, Upload, Download, FileImage, FileText, CheckCircle2, 
-  RefreshCw, Loader2, AlertCircle, ArrowLeft, Shield, Calendar, 
+  RefreshCw, Loader2, AlertCircle, ArrowLeft, Calendar, MapPin,
   ZoomIn, ZoomOut, Plus, Minus, RotateCcw, Move, User, Sparkles
 } from 'lucide-react';
 
@@ -47,8 +46,8 @@ export const ParticipantFlyerPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [autoFramedBadge, setAutoFramedBadge] = useState<string | null>(null);
 
-  // Photo Framing & Zoom Controls (Fluid 2D Panning left/right/up/down)
-  const [zoom, setZoom] = useState<number>(1.2);
+  // Photo Framing & Zoom Controls (Fluid 2D Panning with strict coverage clamping)
+  const [zoom, setZoom] = useState<number>(1.18);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
 
@@ -109,6 +108,7 @@ export const ParticipantFlyerPage: React.FC = () => {
 
   // Pointer event handlers with capture for smooth drag left, right, up, down on mouse & mobile touch
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!photoPreviewUrl) return;
     e.preventDefault();
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -123,17 +123,15 @@ export const ParticipantFlyerPage: React.FC = () => {
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingPhoto) return;
+    if (!isDraggingPhoto || !photoPreviewUrl) return;
     const sW = slotDim.width || 140;
     const sH = slotDim.height || 140;
     const dx = e.clientX - dragStartRef.current.startX;
     const dy = e.clientY - dragStartRef.current.startY;
 
-    // Direct, highly responsive movement left and right
     const newPanX = dragStartRef.current.origPanX + dx / sW;
     const newPanY = dragStartRef.current.origPanY + dy / sH;
 
-    // Generous movement bounds so user can pan freely across the slot
     const clamped = clampPanOffset(
       newPanX,
       newPanY,
@@ -155,8 +153,21 @@ export const ParticipantFlyerPage: React.FC = () => {
   };
 
   const handleZoomChange = (newZoom: number) => {
-    const clampedZoom = Math.max(1.0, Math.min(2.8, Number(newZoom.toFixed(2))));
+    const clampedZoom = Math.max(1.0, Math.min(3.0, Number(newZoom.toFixed(2))));
     setZoom(clampedZoom);
+
+    const sW = slotDim.width || 140;
+    const sH = slotDim.height || 140;
+    const clamped = clampPanOffset(
+      panOffset.x,
+      panOffset.y,
+      clampedZoom,
+      photoNaturalDim.width,
+      photoNaturalDim.height,
+      sW,
+      sH
+    );
+    setPanOffset(clamped);
   };
 
   useEffect(() => {
@@ -257,25 +268,25 @@ export const ParticipantFlyerPage: React.FC = () => {
       }
     }
 
-    if (!tmpl) {
+    if (!tmpl || ev.id === FLAGSHIP_WORSHIP_EVENT.id || ev.slug === FLAGSHIP_WORSHIP_EVENT.slug) {
       if (ev.id === FLAGSHIP_WORSHIP_EVENT.id || ev.slug === FLAGSHIP_WORSHIP_EVENT.slug) {
         tmpl = FLAGSHIP_WORSHIP_TEMPLATE;
       } else {
         tmpl = {
           id: `tmpl_${ev.id}`,
           event_id: ev.id,
-          photo_x: 0.31,
-          photo_y: 0.344,
-          photo_width: 0.38,
-          photo_height: 0.38,
+          photo_x: 0.286,
+          photo_y: 0.351,
+          photo_width: 0.428,
+          photo_height: 0.342,
           photo_shape: 'circle',
-          photo_crop_settings: { zoom: 1.0 },
-          name_x: 0.28,
-          name_y: 0.718,
-          name_width: 0.44,
-          name_height: 0.048,
+          photo_crop_settings: { zoom: 1.15 },
+          name_x: 0.311,
+          name_y: 0.719,
+          name_width: 0.39,
+          name_height: 0.047,
           font_family: 'Plus Jakarta Sans, sans-serif',
-          font_size: 44,
+          font_size: 42,
           font_weight: '800',
           text_color: '#111126',
           text_alignment: 'center',
@@ -334,9 +345,9 @@ export const ParticipantFlyerPage: React.FC = () => {
       setPanOffset(framing.panOffset);
 
       if (framing.faceDetected) {
-        setAutoFramedBadge('Face detected & centered! Drag to move left or right');
+        setAutoFramedBadge('Face detected & centered! Drag on photo to nudge position');
       } else {
-        setAutoFramedBadge('Photo centered! Drag to move left or right');
+        setAutoFramedBadge('Photo centered! Drag on photo to nudge position');
       }
 
       setTimeout(() => setAutoFramedBadge(null), 4000);
@@ -431,7 +442,7 @@ export const ParticipantFlyerPage: React.FC = () => {
       setGenerationStep('Rendering ultra high-res print flyer...');
       setGenerationProgress(90);
 
-      // Render 100% pixel-perfect flyer with exact same coordinates & user offsets
+      // Render 100% pixel-perfect flyer with exact same coordinates & clamped user offsets
       const canvas = await renderPersonalisedFlyer({
         flyerImageUrl: flyerSrc,
         participantImageUrl: photoPreviewUrl,
@@ -494,7 +505,7 @@ export const ParticipantFlyerPage: React.FC = () => {
     setPhotoPreviewUrl(null);
     setErrorMessage(null);
     setPanOffset({ x: 0, y: 0 });
-    setZoom(1.2);
+    setZoom(1.18);
   };
 
   if (loading) {
@@ -570,425 +581,493 @@ export const ParticipantFlyerPage: React.FC = () => {
 
   const resolvedTextColor = template?.text_color || '#111126';
 
+  // Render the interactive live flyer element (used in both mobile and desktop views)
+  const renderFlyerPreview = () => (
+    <div className="relative inline-block w-full max-w-full overflow-hidden rounded-xl shadow-lg border border-[#E9E8F0] select-none touch-pan-y bg-slate-900">
+      {/* Base Flyer Image */}
+      <img
+        ref={flyerImgRef}
+        src={flyerSrc}
+        alt="Event Flyer"
+        onLoad={updateFlyerDimensions}
+        className="w-full h-auto block select-none pointer-events-none mx-auto"
+      />
+
+      {/* Overlaid Photo Slot positioned with 1:1 mathematical match to Template & Canvas */}
+      {template && (
+        <div
+          ref={photoSlotRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          style={{
+            position: 'absolute',
+            left: `${template.photo_x * 100}%`,
+            top: `${template.photo_y * 100}%`,
+            width: `${template.photo_width * 100}%`,
+            aspectRatio: template.photo_shape === 'circle' ? '1 / 1' : undefined,
+            height: template.photo_shape === 'circle' ? undefined : `${template.photo_height * 100}%`,
+            borderRadius: template.photo_shape === 'circle' ? '9999px' : '10px',
+            overflow: 'hidden',
+          }}
+          className={`cursor-grab active:cursor-grabbing z-10 touch-none shadow-sm ${
+            photoPreviewUrl ? 'ring-1 ring-white/30' : 'border-2 border-dashed border-white/50 bg-black/40'
+          }`}
+          title="Drag directly on your photo to move left, right, up, down"
+        >
+          {photoPreviewUrl ? (
+            (() => {
+              const sW = slotDim.width || 140;
+              const sH = slotDim.height || 140;
+              const naturalW = photoNaturalDim.width || 1000;
+              const naturalH = photoNaturalDim.height || 1000;
+
+              const baseScale = Math.max(sW / naturalW, sH / naturalH);
+              const effectiveZoom = Math.max(1.0, zoom);
+              const renderW = naturalW * baseScale * effectiveZoom;
+              const renderH = naturalH * baseScale * effectiveZoom;
+
+              const defaultLeft = (sW - renderW) / 2;
+              const defaultTop = (sH - renderH) / 2;
+
+              // Strict boundary clamping matching canvas-engine 1:1
+              const minDrawLeft = sW - renderW;
+              const minDrawTop = sH - renderH;
+
+              const rawLeft = defaultLeft + panOffset.x * sW;
+              const rawTop = defaultTop + panOffset.y * sH;
+
+              const imgLeft = Math.min(0, Math.max(minDrawLeft, rawLeft));
+              const imgTop = Math.min(0, Math.max(minDrawTop, rawTop));
+
+              return (
+                <img
+                  src={photoPreviewUrl}
+                  alt="Framed Portrait"
+                  draggable={false}
+                  style={{
+                    position: 'absolute',
+                    width: `${renderW}px`,
+                    height: `${renderH}px`,
+                    left: `${imgLeft}px`,
+                    top: `${imgTop}px`,
+                    maxWidth: 'none',
+                    maxHeight: 'none',
+                    pointerEvents: 'none',
+                    userSelect: 'none',
+                  }}
+                />
+              );
+            })()
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center text-white/80 p-2 text-center pointer-events-none">
+              <Camera className="w-6 h-6 mb-1 text-white/70 animate-pulse" />
+              <span className="text-[10px] font-bold">Your Photo Here</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Participant Name Preview aligned in designated name box */}
+      {template && (
+        <div
+          style={{
+            position: 'absolute',
+            left: `${template.name_x * 100}%`,
+            top: `${template.name_y * 100}%`,
+            width: `${template.name_width * 100}%`,
+            height: `${template.name_height * 100}%`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent:
+              template.text_alignment === 'left'
+                ? 'flex-start'
+                : template.text_alignment === 'right'
+                ? 'flex-end'
+                : 'center',
+          }}
+          className="pointer-events-none select-none z-10 px-1 sm:px-2"
+        >
+          <span
+            style={{
+              fontFamily: template.font_family || 'Plus Jakarta Sans, sans-serif',
+              fontWeight: (template.font_weight as any) || '800',
+              fontSize: `${Math.max(12, Math.min(22, (template.font_size || 42) * (flyerRenderDim.width / 1080)))}px`,
+              color: resolvedTextColor,
+              lineHeight: 1.15,
+            }}
+            className={`truncate font-bold text-center w-full ${
+              isLightColor(resolvedTextColor)
+                ? 'drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]'
+                : 'drop-shadow-[0_1px_1px_rgba(255,255,255,0.7)]'
+            }`}
+          >
+            {fullName.trim() || 'Your Name Here'}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#F8F8FC] flex flex-col font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8] overflow-x-hidden w-full">
       {/* Top Application Bar */}
       <Navbar />
 
-      <main className="flex-1 py-4 sm:py-8 px-2 sm:px-4 flex flex-col items-center justify-start sm:justify-center w-full">
-
-      {/* Main Card Container: Responsive and smooth-scrolling on mobile */}
-      <div className="w-full max-w-lg bg-white sm:rounded-2xl border border-[#E9E8F0] shadow-sm flex flex-col relative">
-        {/* Event Header Banner */}
-        <div className="p-4 sm:p-6 border-b border-[#E9E8F0] text-center bg-white relative">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[#6425E8] bg-[#6425E8]/10 px-3 py-1 rounded-full">
-            Attendee Flyer Creator
-          </span>
-          <h1 className="text-xl sm:text-2xl font-bold text-[#111126] mt-2 leading-snug">{event.event_name}</h1>
-          <p className="text-xs text-[#73738A] mt-1">
-            Add your name and photograph to generate your custom flyer.
-          </p>
-        </div>
-
-        {/* Form OR Result View */}
-        {!resultImageUrl ? (
-          <form onSubmit={handleGenerate} className="p-3 sm:p-6 space-y-4 sm:space-y-5">
-            {errorMessage && (
-              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center space-x-2 animate-scale-up">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>{errorMessage}</span>
-              </div>
-            )}
-
-            {/* Step 1: Full Name Input */}
-            <div className="px-1 sm:px-0">
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-[#6425E8]" />
-                <span>Your Full Name</span>
-              </label>
-              <input
-                type="text"
-                required
-                disabled={generating}
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="e.g. John Amah"
-                className="w-full px-4 py-2.5 bg-white border border-[#E9E8F0] rounded-xl text-sm font-semibold text-[#111126] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition shadow-2xs"
-              />
-            </div>
-
-            {/* Step 2: Photograph Upload & Seamless Automated Face Framing */}
-            <div className="px-1 sm:px-0">
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-[#73738A] flex items-center gap-1.5">
-                  <Camera className="w-3.5 h-3.5 text-[#6425E8]" />
-                  <span>Your Photograph</span>
-                </label>
-                <button
-                  type="button"
-                  disabled={generating}
-                  onClick={handleUseSamplePortrait}
-                  className="text-[11px] font-semibold text-[#6425E8] hover:underline"
-                >
-                  Use sample portrait
-                </button>
-              </div>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                disabled={generating}
-                accept="image/png, image/jpeg, image/webp"
-                className="hidden"
-                onChange={handlePhotoSelect}
-              />
-
-              {!photoPreviewUrl ? (
-                <div
-                  onClick={() => !generating && fileInputRef.current?.click()}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-xl p-6 sm:p-8 flex flex-col items-center justify-center cursor-pointer transition-all ${
-                    isDraggingOver
-                      ? 'border-[#6425E8] bg-[#6425E8]/10 scale-[1.01]'
-                      : 'border-[#E9E8F0] hover:border-[#6425E8] bg-[#F8F8FC] hover:bg-white'
-                  }`}
-                >
-                  <div className="w-12 h-12 rounded-2xl bg-[#6425E8]/10 flex items-center justify-center text-[#6425E8] mb-2.5">
-                    <Camera className="w-6 h-6" />
-                  </div>
-                  <span className="text-sm font-bold text-[#111126]">
-                    {isDraggingOver ? 'Drop photograph to upload' : 'Click or tap to upload photo'}
+      <main className="flex-1 py-4 sm:py-8 px-3 sm:px-6 flex flex-col items-center justify-start w-full max-w-7xl mx-auto">
+        
+        {/* Main Card: Professional 2-Column Desktop Grid & Fluid Mobile View */}
+        <div className="w-full bg-white rounded-2xl border border-[#E9E8F0] shadow-sm overflow-hidden flex flex-col lg:grid lg:grid-cols-12 relative">
+          
+          {/* Left Column / Control Panel */}
+          <div className="lg:col-span-6 xl:col-span-5 p-4 sm:p-6 lg:p-8 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-[#E9E8F0]">
+            <div>
+              {/* Event Header Banner */}
+              <div className="mb-5 sm:mb-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#6425E8] bg-[#6425E8]/10 px-2.5 py-1 rounded-full">
+                    Attendee Flyer Creator
                   </span>
-                  <span className="text-[11px] text-[#73738A] mt-1 text-center">
-                    System automatically detects your face & frames it perfectly
-                  </span>
+                  {event.event_date && (
+                    <span className="text-[10px] font-semibold text-[#73738A] flex items-center gap-1 bg-[#F1F3F9] px-2 py-0.5 rounded-full">
+                      <Calendar className="w-3 h-3 text-[#6425E8]" />
+                      <span className="truncate">{event.event_date}</span>
+                    </span>
+                  )}
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {/* Photo Action & Status Bar */}
-                  <div className="flex items-center justify-between px-0.5">
-                    {autoFramedBadge ? (
-                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 animate-scale-up truncate">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                        <span className="truncate">{autoFramedBadge}</span>
-                      </span>
-                    ) : (
-                      <span className="text-[11px] font-bold text-[#73738A] uppercase tracking-wider flex items-center gap-1.5">
-                        <Move className="w-3.5 h-3.5 text-[#6425E8]" />
-                        <span>Drag photo left/right · Zoom to fill</span>
-                      </span>
-                    )}
+                <h1 className="text-xl sm:text-2xl font-extrabold text-[#111126] leading-tight">
+                  {event.event_name}
+                </h1>
+                <p className="text-xs text-[#73738A] mt-1">
+                  Customise and download your official participation flyer in seconds.
+                </p>
+              </div>
 
-                    <button
-                      type="button"
+              {/* Form OR Result View */}
+              {!resultImageUrl ? (
+                <form onSubmit={handleGenerate} className="space-y-4 sm:space-y-5">
+                  {errorMessage && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center space-x-2 animate-scale-up">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                      <span>{errorMessage}</span>
+                    </div>
+                  )}
+
+                  {/* Step 1: Full Name Input */}
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5 flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-[#6425E8]" />
+                      <span>Your Full Name</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
                       disabled={generating}
-                      onClick={() => fileInputRef.current?.click()}
-                      className="text-xs font-semibold text-[#6425E8] hover:underline shrink-0 ml-2"
-                    >
-                      Change photo
-                    </button>
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="e.g. John Amah"
+                      className="w-full px-4 py-2.5 bg-white border border-[#E9E8F0] rounded-xl text-sm font-semibold text-[#111126] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition shadow-2xs"
+                    />
                   </div>
 
-                  {/* 100% Edge-to-Edge Full-Bleed Flyer Live Preview Box */}
-                  <div className="w-full flex items-center justify-center bg-slate-950/5 p-0 sm:p-2 sm:rounded-2xl sm:border border-[#E9E8F0] overflow-hidden">
-                    <div className="relative inline-block w-full max-w-full overflow-hidden sm:rounded-xl shadow-md sm:shadow-lg border-0 sm:border border-[#E9E8F0] select-none touch-pan-y bg-slate-900">
-                      {/* Base Flyer Image: stretches edge-to-edge full width without border space */}
-                      <img
-                        ref={flyerImgRef}
-                        src={flyerSrc}
-                        alt="Event Flyer"
-                        onLoad={updateFlyerDimensions}
-                        className="w-full h-auto block select-none pointer-events-none mx-auto"
-                      />
+                  {/* Step 2: Photograph Upload */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-[#73738A] flex items-center gap-1.5">
+                        <Camera className="w-3.5 h-3.5 text-[#6425E8]" />
+                        <span>Your Photograph</span>
+                      </label>
+                      <button
+                        type="button"
+                        disabled={generating}
+                        onClick={handleUseSamplePortrait}
+                        className="text-[11px] font-semibold text-[#6425E8] hover:underline"
+                      >
+                        Use sample portrait
+                      </button>
+                    </div>
 
-                      {/* Overlaid Photo Slot positioned with 1:1 mathematical match to Template & Canvas */}
-                      {template && (
-                        <div
-                          ref={photoSlotRef}
-                          onPointerDown={handlePointerDown}
-                          onPointerMove={handlePointerMove}
-                          onPointerUp={handlePointerUp}
-                          onPointerCancel={handlePointerUp}
-                          style={{
-                            position: 'absolute',
-                            left: `${template.photo_x * 100}%`,
-                            top: `${template.photo_y * 100}%`,
-                            width: `${template.photo_width * 100}%`,
-                            aspectRatio: template.photo_shape === 'circle' ? '1 / 1' : undefined,
-                            height: template.photo_shape === 'circle' ? undefined : `${template.photo_height * 100}%`,
-                            borderRadius: template.photo_shape === 'circle' ? '9999px' : '10px',
-                            overflow: 'hidden',
-                          }}
-                          className="cursor-grab active:cursor-grabbing z-10 touch-none shadow-sm ring-1 ring-white/20"
-                          title="Drag directly on your photo to move left, right, up, down"
-                        >
-                          {(() => {
-                            const sW = slotDim.width || 140;
-                            const sH = slotDim.height || 140;
-                            const naturalW = photoNaturalDim.width || 1000;
-                            const naturalH = photoNaturalDim.height || 1000;
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      disabled={generating}
+                      accept="image/png, image/jpeg, image/webp"
+                      className="hidden"
+                      onChange={handlePhotoSelect}
+                    />
 
-                            const baseScale = Math.max(sW / naturalW, sH / naturalH);
-                            const effectiveZoom = Math.max(1.0, zoom);
-                            const renderW = naturalW * baseScale * effectiveZoom;
-                            const renderH = naturalH * baseScale * effectiveZoom;
-
-                            const defaultLeft = (sW - renderW) / 2;
-                            const defaultTop = (sH - renderH) / 2;
-
-                            // Direct fluid horizontal & vertical positioning
-                            const imgLeft = defaultLeft + panOffset.x * sW;
-                            const imgTop = defaultTop + panOffset.y * sH;
-
-                            return (
-                              <img
-                                src={photoPreviewUrl}
-                                alt="Framed Portrait"
-                                draggable={false}
-                                style={{
-                                  position: 'absolute',
-                                  width: `${renderW}px`,
-                                  height: `${renderH}px`,
-                                  left: `${imgLeft}px`,
-                                  top: `${imgTop}px`,
-                                  maxWidth: 'none',
-                                  maxHeight: 'none',
-                                  pointerEvents: 'none',
-                                  userSelect: 'none',
-                                }}
-                              />
-                            );
-                          })()}
+                    {!photoPreviewUrl ? (
+                      <div
+                        onClick={() => !generating && fileInputRef.current?.click()}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        className={`border-2 border-dashed rounded-xl p-5 sm:p-7 flex flex-col items-center justify-center cursor-pointer transition-all ${
+                          isDraggingOver
+                            ? 'border-[#6425E8] bg-[#6425E8]/10 scale-[1.01]'
+                            : 'border-[#E9E8F0] hover:border-[#6425E8] bg-[#F8F8FC] hover:bg-white'
+                        }`}
+                      >
+                        <div className="w-11 h-11 rounded-2xl bg-[#6425E8]/10 flex items-center justify-center text-[#6425E8] mb-2">
+                          <Camera className="w-5 h-5" />
                         </div>
-                      )}
+                        <span className="text-xs sm:text-sm font-bold text-[#111126]">
+                          {isDraggingOver ? 'Drop photograph to upload' : 'Click or tap to upload photo'}
+                        </span>
+                        <span className="text-[10px] text-[#73738A] mt-1 text-center">
+                          Automatic face detection & intelligent framing included
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          {autoFramedBadge ? (
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 animate-scale-up truncate">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                              <span className="truncate">{autoFramedBadge}</span>
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-bold text-[#73738A] uppercase tracking-wider flex items-center gap-1.5">
+                              <Move className="w-3.5 h-3.5 text-[#6425E8]" />
+                              <span>Drag photo to adjust position</span>
+                            </span>
+                          )}
 
-                      {/* Participant Name Preview aligned in designated name box */}
-                      {template && (
-                        <div
-                          style={{
-                            position: 'absolute',
-                            left: `${template.name_x * 100}%`,
-                            top: `${template.name_y * 100}%`,
-                            width: `${template.name_width * 100}%`,
-                            height: `${template.name_height * 100}%`,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent:
-                              template.text_alignment === 'left'
-                                ? 'flex-start'
-                                : template.text_alignment === 'right'
-                                ? 'flex-end'
-                                : 'center',
-                          }}
-                          className="pointer-events-none select-none z-10 px-1 sm:px-2"
-                        >
-                          <span
-                            style={{
-                              fontFamily: template.font_family || 'Plus Jakarta Sans, sans-serif',
-                              fontWeight: (template.font_weight as any) || '800',
-                              fontSize: `${Math.max(12, Math.min(22, (template.font_size || 42) * (flyerRenderDim.width / 1080)))}px`,
-                              color: resolvedTextColor,
-                              lineHeight: 1.15,
-                            }}
-                            className={`truncate font-bold text-center w-full ${
-                              isLightColor(resolvedTextColor)
-                                ? 'drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]'
-                                : 'drop-shadow-[0_1px_1px_rgba(255,255,255,0.7)]'
-                            }`}
+                          <button
+                            type="button"
+                            disabled={generating}
+                            onClick={() => fileInputRef.current?.click()}
+                            className="text-xs font-semibold text-[#6425E8] hover:underline shrink-0 ml-2"
                           >
-                            {fullName.trim() || 'Your Name Here'}
-                          </span>
+                            Change photo
+                          </button>
                         </div>
+
+                        {/* Zoom Slider and Quick Controls */}
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#E9E8F0]">
+                          <div className="flex items-center gap-1 text-xs font-bold text-[#111126] shrink-0">
+                            <ZoomIn className="w-3.5 h-3.5 text-[#6425E8]" />
+                            <span className="text-[11px]">Zoom: {Math.round(zoom * 100)}%</span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-1 max-w-[180px]">
+                            <button
+                              type="button"
+                              onClick={() => handleZoomChange(zoom - 0.15)}
+                              className="w-6 h-6 rounded-md bg-white border border-[#E9E8F0] flex items-center justify-center text-[#73738A] hover:text-[#111126] hover:bg-[#EEF0F6] active:scale-95 transition"
+                              title="Zoom Out"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+
+                            <input
+                              type="range"
+                              min="1.0"
+                              max="2.5"
+                              step="0.05"
+                              value={zoom}
+                              onChange={(e) => handleZoomChange(parseFloat(e.target.value))}
+                              className="flex-1 accent-[#6425E8] h-1.5 bg-[#E9E8F0] rounded-lg cursor-pointer"
+                            />
+
+                            <button
+                              type="button"
+                              onClick={() => handleZoomChange(zoom + 0.15)}
+                              className="w-6 h-6 rounded-md bg-white border border-[#E9E8F0] flex items-center justify-center text-[#73738A] hover:text-[#111126] hover:bg-[#EEF0F6] active:scale-95 transition"
+                              title="Zoom In"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (photoPreviewUrl) {
+                                const img = new Image();
+                                img.onload = async () => {
+                                  const nw = img.naturalWidth || 1000;
+                                  const nh = img.naturalHeight || 1000;
+                                  const sW = slotDim.width || 140;
+                                  const sH = slotDim.height || 140;
+                                  const face = await detectFaceInImage(img);
+                                  const framing = computeOptimalFaceFraming(nw, nh, sW, sH, face);
+                                  setZoom(framing.zoom);
+                                  setPanOffset(framing.panOffset);
+                                };
+                                img.src = photoPreviewUrl;
+                              }
+                            }}
+                            className="px-2 py-1 text-[10px] font-bold rounded-md bg-white border border-[#E9E8F0] hover:border-[#6425E8] text-[#73738A] hover:text-[#111126] flex items-center gap-1 transition shadow-2xs shrink-0"
+                          >
+                            <RotateCcw className="w-3 h-3 text-[#6425E8]" />
+                            <span>Center</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mobile-Only Inlined Flyer Preview */}
+                  <div className="lg:hidden pt-2">
+                    <span className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-2">
+                      Live Flyer Preview (Drag photo to adjust)
+                    </span>
+                    {renderFlyerPreview()}
+                  </div>
+
+                  {/* Live Progress Bar when Generating */}
+                  {generating && (
+                    <div className="p-4 bg-[#F8F8FC] border border-[#6425E8]/30 rounded-xl space-y-2 animate-slide-up-fade">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-[#111126] flex items-center gap-1.5">
+                          <Loader2 className="w-3.5 h-3.5 text-[#6425E8] animate-spin" />
+                          {generationStep}
+                        </span>
+                        <span className="font-mono font-bold text-[#6425E8]">{generationProgress}%</span>
+                      </div>
+                      <div className="w-full bg-[#E9E8F0] h-2 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-[#6425E8] to-[#9638F5] transition-all duration-300 ease-out rounded-full"
+                          style={{ width: `${generationProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Primary Action Button */}
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={generating}
+                      className="interactive-btn w-full py-3.5 bg-[#6425E8] hover:bg-[#4214B8] text-white font-semibold text-xs sm:text-sm rounded-xl shadow-sm transition flex items-center justify-center space-x-2"
+                    >
+                      {generating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Generating Ultra High-Res Flyer...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Generate My Official Flyer</span>
+                        </>
                       )}
+                    </button>
+                    <p className="text-[11px] text-[#73738A] text-center mt-2">
+                      Ultra high-resolution print output · Free & Instant
+                    </p>
+                  </div>
+                </form>
+              ) : (
+                /* Result Screen Controls */
+                <div className="space-y-5 animate-scale-up">
+                  <div className="inline-flex items-center space-x-1.5 text-emerald-700 text-xs font-bold bg-emerald-50 px-3.5 py-1.5 rounded-full border border-emerald-200">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Your Personalised Flyer is Ready!</span>
+                  </div>
+
+                  {/* Mobile Result Preview */}
+                  <div className="lg:hidden rounded-xl overflow-hidden shadow-lg border border-[#E9E8F0]">
+                    <img src={resultImageUrl} alt="Personalised Flyer" className="w-full h-auto block" />
+                  </div>
+
+                  {/* Download Options */}
+                  <div>
+                    <span className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-2.5">
+                      Select Download Format
+                    </span>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => handleDownload('png')}
+                        className="interactive-btn py-3 px-2 bg-[#6425E8] hover:bg-[#4214B8] text-white rounded-xl text-xs font-semibold flex flex-col items-center justify-center space-y-1 shadow-sm transition"
+                      >
+                        <FileImage className="w-4 h-4" />
+                        <span>{downloadingFormat === 'png' ? 'Downloaded!' : 'PNG (Hi-Res)'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDownload('jpg')}
+                        className="interactive-btn py-3 px-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] rounded-xl text-xs font-semibold flex flex-col items-center justify-center space-y-1 transition shadow-2xs"
+                      >
+                        <FileImage className="w-4 h-4" />
+                        <span>{downloadingFormat === 'jpg' ? 'Downloaded!' : 'JPG'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDownload('pdf')}
+                        className="interactive-btn py-3 px-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] rounded-xl text-xs font-semibold flex flex-col items-center justify-center space-y-1 transition shadow-2xs"
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span>{downloadingFormat === 'pdf' ? 'Downloaded!' : 'PDF Document'}</span>
+                      </button>
                     </div>
                   </div>
 
-                  {/* Clean Zoom Slider & Horizontal Panning Controls */}
-                  <div className="bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl p-2.5 sm:p-3 flex items-center justify-between gap-2.5">
-                    <div className="flex items-center gap-1 text-xs font-bold text-[#111126] shrink-0">
-                      <ZoomIn className="w-3.5 h-3.5 text-[#6425E8]" />
-                      <span className="hidden sm:inline">Zoom to Fill</span>
-                      <span className="sm:hidden text-[11px]">Zoom</span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 flex-1 max-w-xs">
-                      <button
-                        type="button"
-                        onClick={() => handleZoomChange(zoom - 0.15)}
-                        className="w-7 h-7 rounded-lg bg-white border border-[#E9E8F0] flex items-center justify-center text-[#73738A] hover:text-[#111126] hover:bg-[#EEF0F6] active:scale-95 transition"
-                        title="Zoom Out"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-
-                      <input
-                        type="range"
-                        min="1.0"
-                        max="2.5"
-                        step="0.05"
-                        value={zoom}
-                        onChange={(e) => handleZoomChange(parseFloat(e.target.value))}
-                        className="flex-1 accent-[#6425E8] h-2 bg-[#E9E8F0] rounded-lg cursor-pointer"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => handleZoomChange(zoom + 0.15)}
-                        className="w-7 h-7 rounded-lg bg-white border border-[#E9E8F0] flex items-center justify-center text-[#73738A] hover:text-[#111126] hover:bg-[#EEF0F6] active:scale-95 transition"
-                        title="Zoom In"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
+                  {/* Generate Another Option */}
+                  <div className="pt-3 border-t border-[#E9E8F0]">
                     <button
-                      type="button"
-                      onClick={() => {
-                        if (photoPreviewUrl) {
-                          const img = new Image();
-                          img.onload = async () => {
-                            const nw = img.naturalWidth || 1000;
-                            const nh = img.naturalHeight || 1000;
-                            const sW = slotDim.width || 140;
-                            const sH = slotDim.height || 140;
-                            const face = await detectFaceInImage(img);
-                            const framing = computeOptimalFaceFraming(nw, nh, sW, sH, face);
-                            setZoom(framing.zoom);
-                            setPanOffset(framing.panOffset);
-                          };
-                          img.src = photoPreviewUrl;
-                        }
-                      }}
-                      className="px-2 py-1 text-[11px] font-bold rounded-lg bg-white border border-[#E9E8F0] hover:border-[#6425E8] text-[#73738A] hover:text-[#111126] flex items-center gap-1 transition shadow-2xs shrink-0"
+                      onClick={handleReset}
+                      className="interactive-btn w-full py-2.5 bg-[#F8F8FC] hover:bg-white border border-[#E9E8F0] hover:border-[#6425E8] text-[#111126] rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 transition"
                     >
-                      <RotateCcw className="w-3 h-3 text-[#6425E8]" />
-                      <span>Re-center</span>
+                      <RefreshCw className="w-3.5 h-3.5 text-[#6425E8]" />
+                      <span>Personalise Another Flyer</span>
                     </button>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Live Progress Bar when Generating */}
-            {generating && (
-              <div className="p-4 bg-[#F8F8FC] border border-[#6425E8]/30 rounded-xl space-y-2 animate-slide-up-fade">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-[#111126] flex items-center gap-1.5">
-                    <Loader2 className="w-3.5 h-3.5 text-[#6425E8] animate-spin" />
-                    {generationStep}
-                  </span>
-                  <span className="font-mono font-bold text-[#6425E8]">{generationProgress}%</span>
-                </div>
-                <div className="w-full bg-[#E9E8F0] h-2 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-[#6425E8] to-[#9638F5] transition-all duration-300 ease-out rounded-full"
-                    style={{ width: `${generationProgress}%` }}
-                  />
-                </div>
+            {/* Event Details Footer inside Control Panel */}
+            {event.venue && (
+              <div className="mt-6 pt-4 border-t border-[#E9E8F0] text-xs text-[#73738A] flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-[#6425E8] shrink-0" />
+                <span className="truncate">{event.venue}</span>
               </div>
             )}
+          </div>
 
-            {/* Primary Action Button */}
-            <div className="px-1 sm:px-0">
-              <button
-                type="submit"
-                disabled={generating}
-                className="interactive-btn w-full py-3.5 bg-[#6425E8] hover:bg-[#4214B8] text-white font-semibold text-xs sm:text-sm rounded-xl shadow-sm transition flex items-center justify-center space-x-2 animate-pulse-glow"
-              >
-                {generating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Generating Ultra High-Res Flyer...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Generate My Official Flyer</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            <div className="text-center pb-4 sm:pb-0">
-              <span className="text-[11px] text-[#73738A]">
-                Instant high-resolution download · Ready in seconds
-              </span>
-            </div>
-          </form>
-        ) : (
-          /* Result Screen: Full width edge-to-edge flyer preview on mobile with zero border space */
-          <div className="py-3 px-0 sm:p-6 space-y-4 sm:space-y-5 animate-scale-up w-full">
-            <div className="text-center px-4 sm:px-0">
-              <div className="inline-flex items-center space-x-1.5 text-emerald-700 text-xs font-bold mb-3 bg-emerald-50 px-3.5 py-1.5 rounded-full border border-emerald-200">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>Your Personalised Flyer is Ready!</span>
-              </div>
-            </div>
-
-            {/* Generated Flyer Preview: 100% full width on mobile screen with ZERO border gaps */}
-            <div className="w-full sm:max-w-md mx-auto overflow-hidden sm:rounded-xl shadow-md sm:shadow-xl border-0 sm:border border-[#E9E8F0] bg-black/5 relative group p-0">
-              <img
-                src={resultImageUrl}
-                alt="Personalised Flyer"
-                className="w-full h-auto block"
-              />
-            </div>
-
-            {/* Download Options */}
-            <div className="px-4 sm:px-0">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] text-center mb-2.5">
-                Download Format
-              </span>
-
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => handleDownload('png')}
-                  className="interactive-btn py-2.5 px-2 bg-[#6425E8] hover:bg-[#4214B8] text-white rounded-xl text-xs font-semibold flex flex-col items-center justify-center space-y-1 shadow-sm transition"
-                >
-                  <FileImage className="w-4 h-4" />
-                  <span>{downloadingFormat === 'png' ? 'Downloaded!' : 'PNG (Hi-Res)'}</span>
-                </button>
-
-                <button
-                  onClick={() => handleDownload('jpg')}
-                  className="interactive-btn py-2.5 px-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] rounded-xl text-xs font-semibold flex flex-col items-center justify-center space-y-1 transition shadow-2xs"
-                >
-                  <FileImage className="w-4 h-4" />
-                  <span>{downloadingFormat === 'jpg' ? 'Downloaded!' : 'JPG'}</span>
-                </button>
-
-                <button
-                  onClick={() => handleDownload('pdf')}
-                  className="interactive-btn py-2.5 px-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] rounded-xl text-xs font-semibold flex flex-col items-center justify-center space-y-1 transition shadow-2xs"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>{downloadingFormat === 'pdf' ? 'Downloaded!' : 'PDF'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Generate Another Option */}
-            <div className="pt-2 sm:pt-3 border-t border-[#E9E8F0] text-center pb-4 sm:pb-0">
-              <button
-                onClick={handleReset}
-                className="interactive-btn text-xs font-medium text-[#73738A] hover:text-[#111126] inline-flex items-center space-x-1.5 py-1.5 transition"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Personalise Another Flyer</span>
-              </button>
+          {/* Right Column / Desktop Sticky Flyer Preview */}
+          <div className="hidden lg:flex lg:col-span-6 xl:col-span-7 bg-[#F4F4F8] p-6 lg:p-8 items-center justify-center relative min-h-[580px]">
+            <div className="w-full max-w-md mx-auto sticky top-24">
+              {!resultImageUrl ? (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#73738A]">
+                      Live Visual Preview
+                    </span>
+                    {photoPreviewUrl && (
+                      <span className="text-[11px] text-[#6425E8] font-medium flex items-center gap-1">
+                        <Move className="w-3 h-3" />
+                        <span>Drag photo directly on canvas</span>
+                      </span>
+                    )}
+                  </div>
+                  {renderFlyerPreview()}
+                </div>
+              ) : (
+                <div>
+                  <span className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-2 text-center">
+                    Official Output Preview
+                  </span>
+                  <div className="overflow-hidden rounded-xl shadow-xl border border-[#E9E8F0] bg-black/5">
+                    <img src={resultImageUrl} alt="Personalised Flyer" className="w-full h-auto block" />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Clean Footer */}
-      <div className="my-4 text-center text-[11px] text-[#73738A] flex items-center space-x-2 shrink-0">
-        <span>Powered by Eventra Create</span>
-        <span>·</span>
-        <span className="text-[#6425E8] font-semibold">Events. Elevated.</span>
-      </div>
+        </div>
+
+        {/* Clean Global Footer */}
+        <div className="my-4 text-center text-[11px] text-[#73738A] flex items-center space-x-2 shrink-0">
+          <span>Powered by Eventra Create</span>
+          <span>·</span>
+          <span className="text-[#6425E8] font-semibold">Events. Elevated.</span>
+        </div>
       </main>
     </div>
   );

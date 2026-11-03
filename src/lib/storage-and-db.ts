@@ -302,7 +302,7 @@ export function saveCustomSupabaseConfig(cfg: SupabaseConfig) {
 }
 
 // Clean storage initialization without any dummy user or mock data
-export const LS_CLEAN_WIPE_KEY = 'eventra_clean_wipe_v6';
+export const LS_CLEAN_WIPE_KEY = 'eventra_clean_wipe_v7';
 
 export const FLAGSHIP_WORSHIP_EVENT: FlyerEvent = {
   id: 'ev_worship_expression_40',
@@ -326,24 +326,24 @@ export const FLAGSHIP_WORSHIP_EVENT: FlyerEvent = {
 export const FLAGSHIP_WORSHIP_TEMPLATE: FlyerTemplate = {
   id: 'tmpl_ev_worship_expression_40',
   event_id: 'ev_worship_expression_40',
-  photo_x: 0.31,
-  photo_y: 0.344,
-  photo_width: 0.38,
-  photo_height: 0.38,
+  photo_x: 0.286,
+  photo_y: 0.351,
+  photo_width: 0.428,
+  photo_height: 0.342,
   photo_shape: 'circle',
-  photo_crop_settings: { zoom: 1.0 },
-  name_x: 0.28,
-  name_y: 0.718,
-  name_width: 0.44,
-  name_height: 0.048,
+  photo_crop_settings: { zoom: 1.15 },
+  name_x: 0.311,
+  name_y: 0.719,
+  name_width: 0.39,
+  name_height: 0.047,
   font_family: 'Plus Jakarta Sans, sans-serif',
-  font_size: 44,
+  font_size: 42,
   font_weight: '800',
   text_color: '#111126',
   text_alignment: 'center',
   max_lines: 1,
   created_at: '2026-11-01T00:00:00.000Z',
-  updated_at: '2026-11-03T11:00:00.000Z',
+  updated_at: '2026-11-03T12:00:00.000Z',
 };
 
 export async function clearAllSystemData(): Promise<void> {
@@ -393,11 +393,13 @@ export async function initializeLocalData(): Promise<void> {
 
   const existingTmplsRaw = safeLocalStorageGet(LS_TEMPLATES_KEY);
   let tmplsList: FlyerTemplate[] = existingTmplsRaw ? JSON.parse(existingTmplsRaw) : [];
-  const hasWorshipTmpl = tmplsList.some((t) => t.event_id === FLAGSHIP_WORSHIP_EVENT.id);
-  if (!hasWorshipTmpl) {
+  const worshipTmplIdx = tmplsList.findIndex((t) => t.event_id === FLAGSHIP_WORSHIP_EVENT.id);
+  if (worshipTmplIdx >= 0) {
+    tmplsList[worshipTmplIdx] = FLAGSHIP_WORSHIP_TEMPLATE;
+  } else {
     tmplsList.unshift(FLAGSHIP_WORSHIP_TEMPLATE);
-    safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify(tmplsList));
   }
+  safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify(tmplsList));
 
   if (!safeLocalStorageGet(LS_REGISTRATIONS_KEY)) safeLocalStorageSet(LS_REGISTRATIONS_KEY, JSON.stringify([]));
   if (!safeLocalStorageGet(LS_INVITATIONS_KEY)) safeLocalStorageSet(LS_INVITATIONS_KEY, JSON.stringify([]));

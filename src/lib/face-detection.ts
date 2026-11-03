@@ -156,9 +156,9 @@ export function computeOptimalFaceFraming(
   const baseScale = Math.max(slotWidth / imgWidth, slotHeight / imgHeight);
 
   // Generous initial zoom so portrait photos comfortably fill the circle with room to move left & right
-  let suggestedZoom = 1.20;
+  let suggestedZoom = 1.18;
   if (face && face.boxHeight < 0.22) {
-    suggestedZoom = 1.38;
+    suggestedZoom = 1.35;
   } else if (face && face.boxHeight > 0.45) {
     suggestedZoom = 1.10;
   }
@@ -177,35 +177,49 @@ export function computeOptimalFaceFraming(
   const defaultLeft = (slotWidth - renderW) / 2;
   const defaultTop = (slotHeight - renderH) / 2;
 
-  const panX = slotWidth > 0 ? (drawLeft - defaultLeft) / slotWidth : 0;
-  const panY = slotHeight > 0 ? (drawTop - defaultTop) / slotHeight : 0;
+  const rawPanX = slotWidth > 0 ? (drawLeft - defaultLeft) / slotWidth : 0;
+  const rawPanY = slotHeight > 0 ? (drawTop - defaultTop) / slotHeight : 0;
+
+  // Strict boundary clamping so the photo NEVER leaves any empty space inside the slot
+  const clamped = clampPanOffset(rawPanX, rawPanY, suggestedZoom, imgWidth, imgHeight, slotWidth, slotHeight);
 
   return {
     zoom: Number(suggestedZoom.toFixed(2)),
-    panOffset: {
-      x: Number(Math.max(-0.85, Math.min(0.85, panX)).toFixed(4)),
-      y: Number(Math.max(-0.85, Math.min(0.85, panY)).toFixed(4)),
-    },
+    panOffset: clamped,
     faceDetected: face !== null,
   };
 }
 
 /**
  * Clamps user pan offset during manual drag or zoom so the photo can be moved
- * freely to the left and right, and up and down.
+ * freely to the left, right, up, and down, while strictly guaranteeing that the photo
+ * NEVER detaches from any edge of the slot, leaving ZERO white space or gaps.
  */
 export function clampPanOffset(
   panX: number,
   panY: number,
-  _zoom: number,
-  _imgWidth: number,
-  _imgHeight: number,
-  _slotWidth: number,
-  _slotHeight: number
+  zoom: number,
+  imgWidth: number,
+  imgHeight: number,
+  slotWidth: number,
+  slotHeight: number
 ): { x: number; y: number } {
-  // Allow full, responsive movement left and right (up to 85% of slot width)
-  const clampedX = Math.max(-0.85, Math.min(0.85, panX));
-  const clampedY = Math.max(-0.85, Math.min(0.85, panY));
+  const naturalW = imgWidth || 1000;
+  const naturalH = imgHeight || 1000;
+  const sW = slotWidth || 140;
+  const sH = slotHeight || 140;
+
+  const baseScale = Math.max(sW / naturalW, sH / naturalH);
+  const effectiveZoom = Math.max(1.0, zoom);
+  const renderW = naturalW * baseScale * effectiveZoom;
+  const renderH = naturalH * baseScale * effectiveZoom;
+
+  // Calculate maximum permissible pan without revealing borders
+  const maxPanX = Math.max(0, (renderW - sW) / (2 * sW));
+  const maxPanY = Math.max(0, (renderH - sH) / (2 * sH));
+
+  const clampedX = Math.max(-maxPanX, Math.min(maxPanX, panX));
+  const clampedY = Math.max(-maxPanY, Math.min(maxPanY, panY));
 
   return {
     x: Number(clampedX.toFixed(4)),

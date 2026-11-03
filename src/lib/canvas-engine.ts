@@ -71,10 +71,17 @@ export function drawImageCoverWithCrop(
   const defaultLeft = (targetW - renderW) / 2;
   const defaultTop = (targetH - renderH) / 2;
 
-  const drawX = targetX + defaultLeft + offsetX * targetW;
-  const drawY = targetY + defaultTop + offsetY * targetH;
+  // Strict boundary clamping matching the DOM preview 1:1
+  const minDrawLeft = targetW - renderW;
+  const minDrawTop = targetH - renderH;
 
-  ctx.drawImage(img, drawX, drawY, renderW, renderH);
+  const rawLeft = defaultLeft + offsetX * targetW;
+  const rawTop = defaultTop + offsetY * targetH;
+
+  const clampedDrawLeft = Math.min(0, Math.max(minDrawLeft, rawLeft));
+  const clampedDrawTop = Math.min(0, Math.max(minDrawTop, rawTop));
+
+  ctx.drawImage(img, targetX + clampedDrawLeft, targetY + clampedDrawTop, renderW, renderH);
 }
 
 /**
@@ -181,7 +188,7 @@ export async function renderPersonalisedFlyer(payload: CompositePayload): Promis
 
   // Constrain font size by target box height and width
   const maxFontByHeight = Math.max(16, nameBoxH * 0.78);
-  let dynamicFontSize = Math.min(Number(template.font_size || 44) * scale, maxFontByHeight);
+  let dynamicFontSize = Math.min(Number(template.font_size || 42) * scale, maxFontByHeight);
   const minFontSize = Math.max(12, maxFontByHeight * 0.35);
 
   ctx.save();
