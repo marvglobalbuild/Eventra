@@ -304,31 +304,57 @@ export function saveCustomSupabaseConfig(cfg: SupabaseConfig) {
 // Clean storage initialization without any dummy user or mock data
 export const LS_CLEAN_WIPE_KEY = 'eventra_clean_wipe_v6';
 
-export function clearAllSystemData(): void {
+export const FLAGSHIP_WORSHIP_EVENT: FlyerEvent = {
+  id: 'ev_worship_expression_40',
+  user_id: 'usr_organizer_main',
+  org_id: 'org_main',
+  event_name: 'Worship Expression 4.0',
+  slug: 'worship-expression-40',
+  original_flyer_path: '/assets/aistudio/IMG_2529_74b7441a.jpeg',
+  original_flyer_data_url: '',
+  category: 'Gala & Worship',
+  venue: '177 Aka Road, Opp. IBB IL, Uyo, Akwa Ibom State',
+  event_date: '15th Nov 2026 · 5:00 PM Prompt',
+  status: 'published',
+  visibility: 'public',
+  description: 'Theme: When Our Hearts Speak. An evening of deep spiritual worship and orchestra.',
+  capacity: 2500,
+  created_at: '2026-11-01T00:00:00.000Z',
+  updated_at: '2026-11-03T11:00:00.000Z',
+};
+
+export const FLAGSHIP_WORSHIP_TEMPLATE: FlyerTemplate = {
+  id: 'tmpl_ev_worship_expression_40',
+  event_id: 'ev_worship_expression_40',
+  photo_x: 0.31,
+  photo_y: 0.344,
+  photo_width: 0.38,
+  photo_height: 0.38,
+  photo_shape: 'circle',
+  photo_crop_settings: { zoom: 1.0 },
+  name_x: 0.28,
+  name_y: 0.718,
+  name_width: 0.44,
+  name_height: 0.048,
+  font_family: 'Plus Jakarta Sans, sans-serif',
+  font_size: 44,
+  font_weight: '800',
+  text_color: '#111126',
+  text_alignment: 'center',
+  max_lines: 1,
+  created_at: '2026-11-01T00:00:00.000Z',
+  updated_at: '2026-11-03T11:00:00.000Z',
+};
+
+export async function clearAllSystemData(): Promise<void> {
   try {
-    localStorage.removeItem(LS_EVENTS_KEY);
-    localStorage.removeItem(LS_TEMPLATES_KEY);
-    localStorage.removeItem(LS_REGISTRATIONS_KEY);
-    localStorage.removeItem(LS_INVITATIONS_KEY);
-    localStorage.removeItem(LS_PARTICIPANTS_KEY);
-    localStorage.removeItem(LS_DOWNLOADS_KEY);
-    localStorage.removeItem(LS_SAVED_EVENTS_KEY);
-    localStorage.removeItem(LS_USER_INTERESTS_KEY);
-    localStorage.removeItem(LS_EVENT_ANALYTICS_KEY);
-    localStorage.removeItem(LS_ACCOUNTS_KEY);
-    localStorage.removeItem(LS_AUTH_SESSION);
-    localStorage.removeItem(LS_USER_KEY);
-    localStorage.removeItem(LS_ORGS_KEY);
-    localStorage.removeItem(LS_ORG_MEMBERS_KEY);
-    localStorage.removeItem(LS_CURRENT_ORG_KEY);
-    localStorage.removeItem(LS_VISITS_KEY);
-    
-    // Purge any file_* items or old dummy keys
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const k = localStorage.key(i);
-      if (k && (k.startsWith('file_') || k.startsWith('eventra_') || k.startsWith('temp_'))) {
-        if (k !== LS_CLEAN_WIPE_KEY && k !== LS_SUPABASE_CONFIG) {
-          localStorage.removeItem(k);
+    if (typeof localStorage !== 'undefined') {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('file_') || k.startsWith('eventra_') || k.startsWith('temp_'))) {
+          if (k !== LS_CLEAN_WIPE_KEY && k !== LS_SUPABASE_CONFIG) {
+            localStorage.removeItem(k);
+          }
         }
       }
     }
@@ -336,9 +362,9 @@ export function clearAllSystemData(): void {
   memoryFileStore.clear();
   memoryKvStore.clear();
 
-  // Initialize empty baseline collections (100% clean, no demo/mock data)
-  safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify([]));
-  safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify([]));
+  // Initialize with flagship live event so participant links work seamlessly on all devices
+  safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify([FLAGSHIP_WORSHIP_EVENT]));
+  safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify([FLAGSHIP_WORSHIP_TEMPLATE]));
   safeLocalStorageSet(LS_REGISTRATIONS_KEY, JSON.stringify([]));
   safeLocalStorageSet(LS_INVITATIONS_KEY, JSON.stringify([]));
   safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify([]));
@@ -353,44 +379,34 @@ export function clearAllSystemData(): void {
 }
 
 export async function initializeLocalData(): Promise<void> {
-  // Check if system wipe was executed
-  const isWiped = safeLocalStorageGet(LS_CLEAN_WIPE_KEY);
-  if (!isWiped) {
-    clearAllSystemData();
-    return;
+  const existingEventsRaw = safeLocalStorageGet(LS_EVENTS_KEY);
+  let eventsList: FlyerEvent[] = existingEventsRaw ? JSON.parse(existingEventsRaw) : [];
+
+  // Guarantee flagship live event is seeded for mobile and fresh visitors
+  const hasWorship = eventsList.some(
+    (e) => e.slug === 'worship-expression-40' || e.slug === 'worship-experience-40' || e.id === 'ev_worship_expression_40'
+  );
+  if (!hasWorship) {
+    eventsList.unshift(FLAGSHIP_WORSHIP_EVENT);
+    safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(eventsList));
   }
 
-  // Ensure collections exist as clean arrays with zero mock items
-  if (!safeLocalStorageGet(LS_EVENTS_KEY)) {
-    safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify([]));
+  const existingTmplsRaw = safeLocalStorageGet(LS_TEMPLATES_KEY);
+  let tmplsList: FlyerTemplate[] = existingTmplsRaw ? JSON.parse(existingTmplsRaw) : [];
+  const hasWorshipTmpl = tmplsList.some((t) => t.event_id === FLAGSHIP_WORSHIP_EVENT.id);
+  if (!hasWorshipTmpl) {
+    tmplsList.unshift(FLAGSHIP_WORSHIP_TEMPLATE);
+    safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify(tmplsList));
   }
-  if (!safeLocalStorageGet(LS_TEMPLATES_KEY)) {
-    safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify([]));
-  }
-  if (!safeLocalStorageGet(LS_REGISTRATIONS_KEY)) {
-    safeLocalStorageSet(LS_REGISTRATIONS_KEY, JSON.stringify([]));
-  }
-  if (!safeLocalStorageGet(LS_INVITATIONS_KEY)) {
-    safeLocalStorageSet(LS_INVITATIONS_KEY, JSON.stringify([]));
-  }
-  if (!safeLocalStorageGet(LS_PARTICIPANTS_KEY)) {
-    safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify([]));
-  }
-  if (!safeLocalStorageGet(LS_DOWNLOADS_KEY)) {
-    safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify([]));
-  }
-  if (!safeLocalStorageGet(LS_SAVED_EVENTS_KEY)) {
-    safeLocalStorageSet(LS_SAVED_EVENTS_KEY, JSON.stringify([]));
-  }
-  if (!safeLocalStorageGet(LS_USER_INTERESTS_KEY)) {
-    safeLocalStorageSet(LS_USER_INTERESTS_KEY, JSON.stringify([]));
-  }
-  if (!safeLocalStorageGet(LS_EVENT_ANALYTICS_KEY)) {
-    safeLocalStorageSet(LS_EVENT_ANALYTICS_KEY, JSON.stringify([]));
-  }
-  if (!safeLocalStorageGet(LS_FORM_CONFIGS_KEY)) {
-    safeLocalStorageSet(LS_FORM_CONFIGS_KEY, JSON.stringify([]));
-  }
+
+  if (!safeLocalStorageGet(LS_REGISTRATIONS_KEY)) safeLocalStorageSet(LS_REGISTRATIONS_KEY, JSON.stringify([]));
+  if (!safeLocalStorageGet(LS_INVITATIONS_KEY)) safeLocalStorageSet(LS_INVITATIONS_KEY, JSON.stringify([]));
+  if (!safeLocalStorageGet(LS_PARTICIPANTS_KEY)) safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify([]));
+  if (!safeLocalStorageGet(LS_DOWNLOADS_KEY)) safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify([]));
+  if (!safeLocalStorageGet(LS_SAVED_EVENTS_KEY)) safeLocalStorageSet(LS_SAVED_EVENTS_KEY, JSON.stringify([]));
+  if (!safeLocalStorageGet(LS_USER_INTERESTS_KEY)) safeLocalStorageSet(LS_USER_INTERESTS_KEY, JSON.stringify([]));
+  if (!safeLocalStorageGet(LS_EVENT_ANALYTICS_KEY)) safeLocalStorageSet(LS_EVENT_ANALYTICS_KEY, JSON.stringify([]));
+  if (!safeLocalStorageGet(LS_FORM_CONFIGS_KEY)) safeLocalStorageSet(LS_FORM_CONFIGS_KEY, JSON.stringify([]));
 }
 
 // Database helper operations
@@ -547,7 +563,18 @@ export const db = {
 
   getEventBySlug(slug: string): FlyerEvent | null {
     const events = this.getEvents();
-    return events.find((e) => e.slug.toLowerCase() === slug.toLowerCase()) || null;
+    const clean = slug.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    const found = events.find((e) => {
+      const s = e.slug.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      return s === clean || e.slug.toLowerCase() === slug.toLowerCase() || e.id === slug;
+    });
+    if (found) return found;
+
+    // Guaranteed resolution for flagship Worship Expression 4.0
+    if (clean.includes('worship') || clean.includes('expression')) {
+      return FLAGSHIP_WORSHIP_EVENT;
+    }
+    return null;
   },
 
   /**
@@ -594,7 +621,13 @@ export const db = {
 
   getTemplateByEventId(eventId: string): FlyerTemplate | null {
     const tmpls = this.getTemplates();
-    return tmpls.find((t) => t.event_id === eventId) || null;
+    const found = tmpls.find((t) => t.event_id === eventId);
+    if (found) return found;
+
+    if (eventId === FLAGSHIP_WORSHIP_EVENT.id || eventId.includes('worship')) {
+      return FLAGSHIP_WORSHIP_TEMPLATE;
+    }
+    return null;
   },
 
   saveTemplate(template: FlyerTemplate): FlyerTemplate {
@@ -903,7 +936,6 @@ export const db = {
     const realEvents = events.filter(
       (e) => e.id !== 'ev_tech_001' && 
              e.id !== 'ev_gala_002' && 
-             e.id !== 'ev_worship_expression_40' &&
              e.id !== 'ev_tech_summit_2026' &&
              e.id !== 'ev_lagos_creative_2026' &&
              e.id !== 'ev_london_leadership_2026' &&

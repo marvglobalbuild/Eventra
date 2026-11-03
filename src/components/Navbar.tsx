@@ -4,8 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { EventraLogo } from './EventraLogo';
 import { 
   Compass, Calendar, PlusCircle, Bookmark, LogIn, 
-  LogOut, User, Menu, X, ChevronDown, Layers, Sparkles,
-  Ticket, Mail, Users, Settings, AlertCircle, ArrowRight
+  LogOut, User, Menu, X, ChevronDown, Layers, Building2,
+  Ticket, Mail, Users, Settings, AlertCircle, ArrowRight, CheckCircle2
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -224,7 +224,7 @@ export const Navbar: React.FC = () => {
                       onClick={() => setShowHostModal(true)}
                       className="px-3.5 py-2 bg-[#6425E8] hover:bg-[#4214B8] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
                     >
-                      <Sparkles className="w-3.5 h-3.5" />
+                      <Building2 className="w-3.5 h-3.5" />
                       <span>Become a Host</span>
                     </button>
                   ) : (
@@ -333,7 +333,7 @@ export const Navbar: React.FC = () => {
                                 }}
                                 className="w-full text-left px-4 py-2 text-xs font-bold text-[#6425E8] hover:bg-[#6425E8]/5 flex items-center gap-2.5 transition cursor-pointer"
                               >
-                                <Sparkles className="w-4 h-4" />
+                                <Building2 className="w-4 h-4" />
                                 <span>Become a Host</span>
                               </button>
                             )}
@@ -590,7 +590,7 @@ export const Navbar: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center">
-                  <Sparkles className="w-4 h-4" />
+                  <Building2 className="w-4 h-4" />
                 </div>
                 <h3 className="text-base font-bold text-[#111126]">Become an Event Host</h3>
               </div>
@@ -641,7 +641,7 @@ export const Navbar: React.FC = () => {
                   disabled={upgrading}
                   className="px-4 py-2 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>{upgrading ? 'Activating...' : 'Activate Host Experience'}</span>
                 </button>
               </div>

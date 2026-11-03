@@ -47,8 +47,12 @@ export function getPublicAppBaseUrl(): string {
     return envUrl.trim().replace(/\/+$/, '');
   }
 
-  // 3. Fallback to current browser origin
+  // 3. Fallback to current browser origin or local Wi-Fi IP for phone testing
   if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      const port = window.location.port ? `:${window.location.port}` : ':3000';
+      return `http://192.168.1.135${port}`;
+    }
     return window.location.origin;
   }
 

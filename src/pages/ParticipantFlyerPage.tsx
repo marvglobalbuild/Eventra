@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { db, initializeLocalData } from '../lib/storage-and-db';
+import { db, initializeLocalData, FLAGSHIP_WORSHIP_EVENT, FLAGSHIP_WORSHIP_TEMPLATE } from '../lib/storage-and-db';
 import { resolveFlyerSource, uploadParticipantPhoto, getSupabase } from '../lib/supabase';
 import { FlyerEvent, FlyerTemplate, Participant } from '../types/database';
 import { 
@@ -221,6 +221,13 @@ export const ParticipantFlyerPage: React.FC = () => {
       }
     }
 
+    if (!ev) {
+      if (cleanSlug.includes('worship') || cleanSlug.includes('expression') || cleanSlug.includes('40') || allEvents.length === 0) {
+        ev = FLAGSHIP_WORSHIP_EVENT;
+        db.saveEvent(ev);
+      }
+    }
+
     if (!ev || ev.status === 'archived') {
       setNotFound(true);
       setLoading(false);
@@ -251,28 +258,32 @@ export const ParticipantFlyerPage: React.FC = () => {
     }
 
     if (!tmpl) {
-      tmpl = {
-        id: `tmpl_${ev.id}`,
-        event_id: ev.id,
-        photo_x: 0.31,
-        photo_y: 0.344,
-        photo_width: 0.38,
-        photo_height: 0.38,
-        photo_shape: 'circle',
-        photo_crop_settings: { zoom: 1.0 },
-        name_x: 0.28,
-        name_y: 0.718,
-        name_width: 0.44,
-        name_height: 0.048,
-        font_family: 'Plus Jakarta Sans, sans-serif',
-        font_size: 44,
-        font_weight: '800',
-        text_color: '#111126',
-        text_alignment: 'center',
-        max_lines: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
+      if (ev.id === FLAGSHIP_WORSHIP_EVENT.id || ev.slug === FLAGSHIP_WORSHIP_EVENT.slug) {
+        tmpl = FLAGSHIP_WORSHIP_TEMPLATE;
+      } else {
+        tmpl = {
+          id: `tmpl_${ev.id}`,
+          event_id: ev.id,
+          photo_x: 0.31,
+          photo_y: 0.344,
+          photo_width: 0.38,
+          photo_height: 0.38,
+          photo_shape: 'circle',
+          photo_crop_settings: { zoom: 1.0 },
+          name_x: 0.28,
+          name_y: 0.718,
+          name_width: 0.44,
+          name_height: 0.048,
+          font_family: 'Plus Jakarta Sans, sans-serif',
+          font_size: 44,
+          font_weight: '800',
+          text_color: '#111126',
+          text_alignment: 'center',
+          max_lines: 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+      }
       db.saveTemplate(tmpl);
     }
     setTemplate(tmpl);
@@ -566,8 +577,8 @@ export const ParticipantFlyerPage: React.FC = () => {
 
       <main className="flex-1 py-4 sm:py-8 px-2 sm:px-4 flex flex-col items-center justify-start sm:justify-center w-full">
 
-      {/* Main Card Container: Edge-to-edge on mobile with ZERO border gaps */}
-      <div className="w-full max-w-lg bg-white sm:rounded-2xl border-0 sm:border border-[#E9E8F0] sm:shadow-sm flex flex-col relative overflow-hidden min-h-screen sm:min-h-0">
+      {/* Main Card Container: Responsive and smooth-scrolling on mobile */}
+      <div className="w-full max-w-lg bg-white sm:rounded-2xl border border-[#E9E8F0] shadow-sm flex flex-col relative">
         {/* Event Header Banner */}
         <div className="p-4 sm:p-6 border-b border-[#E9E8F0] text-center bg-white relative">
           <span className="text-[10px] font-bold uppercase tracking-wider text-[#6425E8] bg-[#6425E8]/10 px-3 py-1 rounded-full">
@@ -660,7 +671,7 @@ export const ParticipantFlyerPage: React.FC = () => {
                   <div className="flex items-center justify-between px-0.5">
                     {autoFramedBadge ? (
                       <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 animate-scale-up truncate">
-                        <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                         <span className="truncate">{autoFramedBadge}</span>
                       </span>
                     ) : (
@@ -682,7 +693,7 @@ export const ParticipantFlyerPage: React.FC = () => {
 
                   {/* 100% Edge-to-Edge Full-Bleed Flyer Live Preview Box */}
                   <div className="w-full flex items-center justify-center bg-slate-950/5 p-0 sm:p-2 sm:rounded-2xl sm:border border-[#E9E8F0] overflow-hidden">
-                    <div className="relative inline-block w-full max-w-full overflow-hidden sm:rounded-xl shadow-md sm:shadow-lg border-0 sm:border border-[#E9E8F0] select-none touch-none bg-slate-900">
+                    <div className="relative inline-block w-full max-w-full overflow-hidden sm:rounded-xl shadow-md sm:shadow-lg border-0 sm:border border-[#E9E8F0] select-none touch-pan-y bg-slate-900">
                       {/* Base Flyer Image: stretches edge-to-edge full width without border space */}
                       <img
                         ref={flyerImgRef}
