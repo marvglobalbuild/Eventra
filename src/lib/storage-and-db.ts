@@ -385,12 +385,87 @@ export async function initializeLocalData(): Promise<void> {
   }
 
   // 7. Initial clean empty collections for live operation (NO dummy user or events)
-  if (!safeLocalStorageGet(LS_EVENTS_KEY)) {
-    safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify([]));
+  // 7. Ensure Worship Expression 4.0 event is seeded with high-res artwork & exact coordinates
+  const eventsRaw = safeLocalStorageGet(LS_EVENTS_KEY);
+  let eventsList: FlyerEvent[] = eventsRaw ? JSON.parse(eventsRaw) : [];
+  const worshipEv = eventsList.find((e) => e.slug === 'worship-expression-40' || e.slug === 'worship-experience-40');
+  
+  if (!worshipEv) {
+    const evId = 'ev_worship_expression_40';
+    const liveEvent: FlyerEvent = {
+      id: evId,
+      user_id: 'usr_organizer_main',
+      org_id: 'org_main',
+      event_name: 'Worship Expression 4.0',
+      slug: 'worship-expression-40',
+      original_flyer_path: '/assets/aistudio/IMG_2529_74b7441a.jpeg',
+      original_flyer_data_url: '',
+      category: 'Gala & Worship',
+      venue: '177 Aka Road, Opp. IBB IL, Uyo, Akwa Ibom State',
+      event_date: '15th Nov 2026 · 5:00 PM Prompt',
+      status: 'published',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    eventsList.unshift(liveEvent);
+    safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(eventsList));
+
+    const templatesRaw = safeLocalStorageGet(LS_TEMPLATES_KEY);
+    const tmplList: FlyerTemplate[] = templatesRaw ? JSON.parse(templatesRaw) : [];
+    const existingTmplIdx = tmplList.findIndex((t) => t.event_id === evId);
+    const exactTemplate: FlyerTemplate = {
+      id: `tmpl_${evId}`,
+      event_id: evId,
+      photo_x: 0.31,
+      photo_y: 0.344,
+      photo_width: 0.38,
+      photo_height: 0.38,
+      photo_shape: 'circle',
+      photo_crop_settings: { zoom: 1.0 },
+      name_x: 0.28,
+      name_y: 0.718,
+      name_width: 0.44,
+      name_height: 0.048,
+      font_family: 'Plus Jakarta Sans, sans-serif',
+      font_size: 44,
+      font_weight: '800',
+      text_color: '#111126',
+      text_alignment: 'center',
+      max_lines: 1,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (existingTmplIdx >= 0) {
+      tmplList[existingTmplIdx] = exactTemplate;
+    } else {
+      tmplList.push(exactTemplate);
+    }
+    safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify(tmplList));
+  } else {
+    // Sanitize existing template to ensure circle Y and name coordinates are exact without frameScale
+    const templatesRaw = safeLocalStorageGet(LS_TEMPLATES_KEY);
+    const tmplList: FlyerTemplate[] = templatesRaw ? JSON.parse(templatesRaw) : [];
+    const tIdx = tmplList.findIndex((t) => t.event_id === worshipEv.id);
+    if (tIdx >= 0) {
+      tmplList[tIdx] = {
+        ...tmplList[tIdx],
+        photo_x: 0.31,
+        photo_y: 0.344,
+        photo_width: 0.38,
+        photo_height: 0.38,
+        photo_shape: 'circle',
+        photo_crop_settings: { zoom: 1.0 },
+        name_x: 0.28,
+        name_y: 0.718,
+        name_width: 0.44,
+        name_height: 0.048,
+        text_color: '#111126',
+        font_weight: '800',
+      };
+      safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify(tmplList));
+    }
   }
-  if (!safeLocalStorageGet(LS_TEMPLATES_KEY)) {
-    safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify([]));
-  }
+
   if (!safeLocalStorageGet(LS_PARTICIPANTS_KEY)) {
     safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify([]));
   }

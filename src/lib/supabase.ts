@@ -27,8 +27,15 @@ export function isSupabaseConnected(): boolean {
  * Resolves flyer image source: Checks remote Supabase storage URL or retrieves from local IndexedDB
  */
 export async function resolveFlyerSource(originalPath: string, dataUrlFallback?: string): Promise<string> {
+  if (!originalPath) return dataUrlFallback || '';
+
+  // Direct public static assets or full URLs
+  if (originalPath.startsWith('/') || originalPath.startsWith('http:') || originalPath.startsWith('https:') || originalPath.startsWith('data:') || originalPath.startsWith('blob:')) {
+    return originalPath;
+  }
+
   const client = getSupabase();
-  if (client && originalPath && !originalPath.startsWith('data:') && !originalPath.startsWith('blob:')) {
+  if (client) {
     const { data } = client.storage.from('event-flyers').getPublicUrl(originalPath);
     if (data?.publicUrl) {
       return data.publicUrl;

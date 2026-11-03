@@ -4,13 +4,9 @@ import { FlyerTemplate } from '../types/database';
 
 export interface PhotoCropSettings {
   zoom?: number; // 1.0 to 3.5 (100% to 350%)
-  offsetX?: number; // -1 to 1 (horizontal pan)
-  offsetY?: number; // -1 to 1 (vertical pan)
-  frameScale?: number; // 0.8 to 2.5 (scales the photo container / circle to fill white spaces)
-  frameOffsetX?: number; // -0.2 to 0.2 (nudge photo slot horizontally)
-  frameOffsetY?: number; // -0.2 to 0.2 (nudge photo slot vertically)
-  nameOffsetY?: number; // -0.1 to 0.2 (nudge name badge position down to prevent colliding with circle)
-  textColor?: string; // Optional override for text color (e.g. participant choosing dark vs light)
+  offsetX?: number; // Normalized pan X relative to slot width
+  offsetY?: number; // Normalized pan Y relative to slot height
+  textColor?: string; // Optional override for text color
 }
 
 export interface CompositePayload {
@@ -35,7 +31,7 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
     img.onload = () => resolve(img);
     img.onerror = () => {
       // Retry without anonymous if local blob/data URL
-      if (src.startsWith('data:') || src.startsWith('blob:')) {
+      if (src.startsWith('data:') || src.startsWith('blob:') || src.startsWith('/')) {
         const retryImg = new Image();
         retryImg.onload = () => resolve(retryImg);
         retryImg.onerror = () => reject(new Error('Failed to decode image data.'));
@@ -49,11 +45,9 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 /**
- * Draws an image into target bounding box with cover scaling, interactive zoom, and pan offset
- */
-/**
- * Draws an image into target bounding box with exact 1:1 WYSIWYG cover scaling, zoom, and pan offset.
- * Matches CSS: object-fit: cover with normalized pan translation (offsetX * targetW, offsetY * targetH).
+ * Draws an image into the target bounding box with 1:1 WYSIWYG cover scaling, zoom,
+ * and clamped pan offsets. Guarantees the photo completely fills the target area
+ * without ANY empty gaps or letterboxing.
  */
 export function drawImageCoverWithCrop(
   ctx: CanvasRenderingContext2D,
@@ -66,23 +60,34 @@ export function drawImageCoverWithCrop(
   offsetX = 0,
   offsetY = 0
 ) {
-  const baseScale = Math.max(targetW / img.naturalWidth, targetH / img.naturalHeight);
-  const effectiveZoom = Math.max(1, zoom);
-  const renderW = img.naturalWidth * baseScale * effectiveZoom;
-  const renderH = img.naturalHeight * baseScale * effectiveZoom;
+  const naturalW = img.naturalWidth || 1000;
+  const naturalH = img.naturalHeight || 1000;
 
-  // Center image inside the target bounding box and apply normalized pan offset
-  // When offsetX > 0, image shifts right. When offsetY > 0, image shifts down (revealing the head).
-  const drawX = targetX + (targetW - renderW) / 2 + offsetX * targetW;
-  const drawY = targetY + (targetH - renderH) / 2 + offsetY * targetH;
+  const baseScale = Math.max(targetW / naturalW, targetH / naturalH);
+  const effectiveZoom = Math.max(1.0, zoom);
+  const renderW = naturalW * baseScale * effectiveZoom;
+  const renderH = naturalH * baseScale * effectiveZoom;
 
-  ctx.drawImage(img, drawX, drawY, renderW, renderH);
+  const defaultLeft = (targetW - renderW) / 2;
+  const defaultTop = (targetH - renderH) / 2;
+
+  // Strict boundary clamping: the image edges must NEVER retract inside targetW / targetH
+  const minDrawLeft = targetW - renderW;
+  const minDrawTop = targetH - renderH;
+
+  const rawLeft = defaultLeft + offsetX * targetW;
+  const rawTop = defaultTop + offsetY * targetH;
+
+  const clampedDrawLeft = Math.min(0, Math.max(minDrawLeft, rawLeft));
+  const clampedDrawTop = Math.min(0, Math.max(minDrawTop, rawTop));
+
+  ctx.drawImage(img, targetX + clampedDrawLeft, targetY + clampedDrawTop, renderW, renderH);
 }
 
 /**
  * Helper to determine if a color is light or dark (for optimal shadow rendering)
  */
-function isLightColor(colorStr: string): boolean {
+export function isLightColor(colorStr: string): boolean {
   if (!colorStr) return true;
   let hex = colorStr.replace('#', '');
   if (hex.length === 3) {
@@ -91,13 +96,13 @@ function isLightColor(colorStr: string): boolean {
   const r = parseInt(hex.substring(0, 2), 16) || 255;
   const g = parseInt(hex.substring(2, 4), 16) || 255;
   const b = parseInt(hex.substring(4, 6), 16) || 255;
-  // Perceived brightness formula
   const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-  return brightness > 140;
+  return brightness > 150;
 }
 
 /**
- * Composites the personalized flyer at native flyer dimensions using normalized coordinates
+ * Composites the personalized flyer at native flyer dimensions using normalized coordinates.
+ * Coordinates and scale are 100% matched to the DOM preview (exact 1:1 WYSIWYG).
  */
 export async function renderPersonalisedFlyer(payload: CompositePayload): Promise<HTMLCanvasElement> {
   const { flyerImageUrl, participantImageUrl, participantName, template, cropSettings } = payload;
@@ -119,78 +124,74 @@ export async function renderPersonalisedFlyer(payload: CompositePayload): Promis
   // 1. Draw base flyer at original full resolution (pixel-perfect)
   ctx.drawImage(flyerImg, 0, 0, width, height);
 
-  // 2. Compute absolute coordinates with centered frame scaling
-  const frameScale = cropSettings?.frameScale ?? template.photo_crop_settings?.frameScale ?? 1.0;
-  const frameOffsetX = (cropSettings?.frameOffsetX ?? template.photo_crop_settings?.frameOffsetX ?? 0) * width;
-  const frameOffsetY = (cropSettings?.frameOffsetY ?? template.photo_crop_settings?.frameOffsetY ?? 0) * height;
+  // 2. Compute absolute coordinates matching the CSS DOM preview 1:1
+  const slotX = Number(template.photo_x) * width;
+  const slotY = Number(template.photo_y) * height;
+  const slotW = Number(template.photo_width) * width;
+  // For circle: height equals width in pixels (aspect-ratio: 1 / 1)
+  const slotH = template.photo_shape === 'circle' ? slotW : Number(template.photo_height) * height;
 
-  // Base slot center in flyer coordinates
-  const baseCenterX = (Number(template.photo_x) + Number(template.photo_width) / 2) * width;
-  const baseCenterY = (Number(template.photo_y) + Number(template.photo_height) / 2) * height;
-
-  const centerX = baseCenterX + frameOffsetX;
-  const centerY = baseCenterY + frameOffsetY;
-
-  let drawX: number;
-  let drawY: number;
-  let drawW: number;
-  let drawH: number;
-
-  // 3. Render Participant Photo with shape clipping and custom zoom/pan
+  // 3. Render Participant Photo with shape clipping and clamped cover scaling
   ctx.save();
   ctx.beginPath();
   if (template.photo_shape === 'circle') {
-    // True circle of diameter = template.photo_width * width * frameScale
-    const diameter = Number(template.photo_width) * width * frameScale;
-    const radius = diameter / 2;
+    const radius = slotW / 2;
+    const centerX = slotX + radius;
+    const centerY = slotY + radius;
     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2, true);
-    drawX = centerX - radius;
-    drawY = centerY - radius;
-    drawW = diameter;
-    drawH = diameter;
   } else {
-    // Rectangle or rounded rectangle scaled from center
-    const photoW = Number(template.photo_width) * width * frameScale;
-    const photoH = Number(template.photo_height) * height * frameScale;
-    const photoX = centerX - photoW / 2;
-    const photoY = centerY - photoH / 2;
-    const cornerRadius = template.photo_crop_settings?.borderRadius ?? (Math.min(photoW, photoH) * 0.08);
-    ctx.roundRect(photoX, photoY, photoW, photoH, cornerRadius);
-    drawX = photoX;
-    drawY = photoY;
-    drawW = photoW;
-    drawH = photoH;
+    const cornerRadius = template.photo_crop_settings?.borderRadius ?? Math.min(slotW, slotH) * 0.08;
+    ctx.roundRect(slotX, slotY, slotW, slotH, cornerRadius);
   }
   ctx.closePath();
   ctx.clip();
 
-  const zoom = cropSettings?.zoom ?? template.photo_crop_settings?.zoom ?? 1.0;
+  const zoom = Math.max(1.0, cropSettings?.zoom ?? 1.0);
   const offsetX = cropSettings?.offsetX ?? 0;
   const offsetY = cropSettings?.offsetY ?? 0;
 
-  drawImageCoverWithCrop(ctx, participantImg, drawX, drawY, drawW, drawH, zoom, offsetX, offsetY);
+  drawImageCoverWithCrop(ctx, participantImg, slotX, slotY, slotW, slotH, zoom, offsetX, offsetY);
   ctx.restore();
 
-  // 4. Render Participant Name directly at template position + optional attendee offset
+  // 4. Render Participant Name directly at template position
   const nameBoxX = Number(template.name_x) * width;
-  const rawNameBoxY = Number(template.name_y) * height;
+  const nameBoxY = Number(template.name_y) * height;
   const nameBoxW = Number(template.name_width) * width;
   const nameBoxH = Number(template.name_height) * height;
 
-  // Baseline scale relative to standard 1080px width
   const scale = width / 1080;
 
-  // Name position offset (allows user or template to push name down)
-  const attendeeNameOffsetY = (cropSettings?.nameOffsetY ?? template.photo_crop_settings?.nameOffsetY ?? 0) * height;
-  const nameBoxY = rawNameBoxY + attendeeNameOffsetY;
-  
+  // Intelligent text color contrast detection
+  let textColor = cropSettings?.textColor || template.text_color || '#111126';
+  try {
+    const sampleBox = ctx.getImageData(
+      Math.max(0, Math.floor(nameBoxX + nameBoxW * 0.25)),
+      Math.max(0, Math.floor(nameBoxY + nameBoxH * 0.25)),
+      Math.max(1, Math.floor(nameBoxW * 0.5)),
+      Math.max(1, Math.floor(nameBoxH * 0.5))
+    );
+    let totalLuminance = 0;
+    const count = sampleBox.data.length / 4;
+    for (let i = 0; i < sampleBox.data.length; i += 4) {
+      totalLuminance += (sampleBox.data[i] * 299 + sampleBox.data[i + 1] * 587 + sampleBox.data[i + 2] * 114) / 1000;
+    }
+    const avgLum = totalLuminance / (count || 1);
+    // If flyer background behind the name is bright (like a white banner box), use high-contrast dark text
+    if (avgLum > 150 && isLightColor(textColor)) {
+      textColor = '#111126';
+    } else if (avgLum < 80 && !isLightColor(textColor)) {
+      textColor = '#FFFFFF';
+    }
+  } catch {
+    // If canvas is tainted or cannot sample, retain current textColor
+  }
+
   // Constrain font size by target box height and width
   const maxFontByHeight = Math.max(16, nameBoxH * 0.78);
   let dynamicFontSize = Math.min(Number(template.font_size || 44) * scale, maxFontByHeight);
   const minFontSize = Math.max(12, maxFontByHeight * 0.35);
 
   ctx.save();
-  const textColor = cropSettings?.textColor || template.text_color || '#FFFFFF';
   ctx.fillStyle = textColor;
   ctx.textAlign = template.text_alignment || 'center';
   ctx.textBaseline = 'middle';
@@ -200,8 +201,8 @@ export async function renderPersonalisedFlyer(payload: CompositePayload): Promis
 
   // Measure text and downscale iteratively so participantName fits comfortably inside nameBoxW
   ctx.font = `${fontWeight} ${dynamicFontSize}px ${fontFamily}`;
-  const maxAllowedWidth = nameBoxW * 0.92; // 8% breathing margin
-  
+  const maxAllowedWidth = nameBoxW * 0.92;
+
   while (ctx.measureText(participantName).width > maxAllowedWidth && dynamicFontSize > minFontSize) {
     dynamicFontSize -= 1.5;
     ctx.font = `${fontWeight} ${dynamicFontSize}px ${fontFamily}`;
@@ -209,19 +210,18 @@ export async function renderPersonalisedFlyer(payload: CompositePayload): Promis
 
   // Anchor text coordinate according to alignment
   let targetTextX = nameBoxX + nameBoxW / 2;
-  if (template.text_alignment === 'left') targetTextX = nameBoxX + (nameBoxW * 0.04);
-  if (template.text_alignment === 'right') targetTextX = nameBoxX + (nameBoxW * 0.96);
+  if (template.text_alignment === 'left') targetTextX = nameBoxX + nameBoxW * 0.04;
+  if (template.text_alignment === 'right') targetTextX = nameBoxX + nameBoxW * 0.96;
 
   const targetTextY = nameBoxY + nameBoxH / 2;
 
-  // Intelligently render shadow: If text is light, use drop shadow; if dark, use subtle clean ambient
+  // Intelligently render shadow based on text luminance
   if (isLightColor(textColor)) {
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
     ctx.shadowBlur = 6 * scale;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 2 * scale;
   } else {
-    // For dark text on light flyer badges (like cream or white boxes), use clean crisp rendering
     ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
     ctx.shadowBlur = 2 * scale;
     ctx.shadowOffsetX = 0;
