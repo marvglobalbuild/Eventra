@@ -1,0 +1,1515 @@
+EVENTRA — STAGE 1 MASTER DEVELOPMENT PROMPT
+
+Building the Core Event Technology Platform
+
+Product: EVENTRA
+Tagline: Events. Elevated.
+Development environment: Google AI Studio Build Mode
+Backend: Existing Supabase project
+Current working product: Eventra Create — personalised participant flyer generation.
+
+⸻
+
+1. YOUR ROLE
+
+Act as a senior SaaS architect, principal full-stack engineer, product designer, database architect and security specialist.
+
+You are continuing development of an existing application called EVENTRA.
+
+Your task is to implement Stage 1 of Eventra’s long-term product roadmap.
+
+Stage 1 transforms Eventra from a platform primarily focused on personalised flyer generation into a broader event technology platform.
+
+The platform will serve two audiences:
+
+1. Event organisers who create, promote and manage events.
+2. Event attendees who discover events, view event information, receive invitations and register to participate.
+
+This is a two-sided platform.
+
+Eventra must become a place where people can both CREATE events and DISCOVER events.
+
+IMPORTANT DEVELOPMENT RULES:
+
+* Work on the existing application.
+* Do not rebuild the project from scratch.
+* Do not replace the existing Supabase backend.
+* Do not migrate to Firebase.
+* Do not delete existing database tables or records.
+* Do not break existing authentication.
+* Do not break the existing Eventra Create feature.
+* Do not remove existing participant functionality.
+* Do not replace working features with mock implementations.
+* Inspect the existing codebase and database before making changes.
+* Use safe, incremental database migrations.
+* Reuse existing components and services wherever possible.
+
+The first task is to audit the existing project and prepare a safe implementation plan.
+
+⸻
+
+2. STAGE 1 OBJECTIVES
+
+Implement the following five interconnected modules:
+
+1. EVENTRA MANAGE
+2. EVENTRA DISCOVER
+3. EVENTRA EVENT PAGES
+4. EVENTRA INVITE
+5. EVENTRA REGISTER
+
+These features must work together through a shared event management foundation.
+
+The objective is not to create five disconnected applications.
+
+They must operate as connected capabilities within the same Eventra ecosystem.
+
+For example:
+
+An organiser creates an event using Eventra Manage.
+
+They upload an event cover image and publish it.
+
+The event can then appear on Eventra Discover if the organiser has enabled public visibility.
+
+The event receives a professional public event page.
+
+The organiser can share the page, invite guests and accept registrations.
+
+The organiser can monitor registrations and invitation responses from their dashboard.
+
+The existing Eventra Create feature should also remain accessible from the same event workspace.
+
+⸻
+
+3. EVENTRA MANAGE — EVENT MANAGEMENT SYSTEM
+
+This is the foundation for the entire platform.
+
+Develop a comprehensive event management experience.
+
+3.1 Event creation
+
+Allow authenticated organisers to create events.
+
+Provide the following event information:
+
+* Event title.
+* Event description.
+* Event category.
+* Event cover image.
+* Event date.
+* Start time.
+* End time.
+* Time zone.
+* Venue name.
+* Full event address.
+* City.
+* Country.
+* Online or physical event.
+* Online meeting URL where applicable.
+* Organiser name.
+* Organiser contact information.
+* Event website where available.
+
+Support event categories such as:
+
+* Business.
+* Conferences.
+* Workshops.
+* Education.
+* Technology.
+* Religion and Faith.
+* Church Events.
+* Music.
+* Entertainment.
+* Networking.
+* Community.
+* Charity.
+* Health and Wellness.
+* Sports.
+* Lifestyle.
+* Weddings and Celebrations.
+* Other.
+
+Organisers should be able to select the most appropriate category.
+
+3.2 Event visibility
+
+Introduce event visibility settings.
+
+Every event must have one of the following visibility states:
+
+Public
+
+The event can appear on Eventra Discover and be accessed by anyone through its public event page.
+
+Unlisted
+
+The event does not appear in public discovery but can be accessed by people who have the sharing link.
+
+Private
+
+The event is restricted to authorised organisers and invited participants through appropriate access controls.
+
+The default should be Public for organisers creating an event intended for discovery, but the organiser must explicitly be able to change it.
+
+Do not confuse event publication status with event visibility.
+
+An event should have separate fields for:
+
+* Publication status.
+* Visibility.
+* Registration status.
+
+3.3 Event statuses
+
+Support:
+
+* Draft.
+* Published.
+* Completed.
+* Cancelled.
+* Archived.
+
+Prevent cancelled or unpublished events from appearing as active public recommendations.
+
+3.4 Event editing
+
+Organisers must be able to:
+
+* Edit event details.
+* Change the event image.
+* Change the date and time.
+* Update location.
+* Change visibility.
+* Update registration settings.
+* Publish or unpublish an event.
+* Cancel an event.
+* Archive an event.
+
+Provide confirmation dialogs for important destructive actions.
+
+3.5 Event management dashboard
+
+Create an individual management workspace for each event.
+
+Each event workspace should include:
+
+* Event overview.
+* Event details.
+* Public event page link.
+* Invitation management.
+* Registration management.
+* Attendee list.
+* Eventra Create access.
+* Event statistics.
+* Event settings.
+
+The event workspace should become the central location for managing all activities related to an event.
+
+3.6 Event statistics
+
+Display accurate statistics retrieved from Supabase.
+
+Include:
+
+* Total registrations.
+* Confirmed registrations.
+* Pending RSVPs.
+* Declined invitations.
+* Registration conversion where measurable.
+* Event page views, only if actual tracking has been implemented.
+* Flyer generations from Eventra Create.
+
+Do not display fabricated numbers.
+
+Use clear empty states when no data exists.
+
+⸻
+
+4. EVENTRA DISCOVER — EVENT DISCOVERY MARKETPLACE
+
+This is a major new feature.
+
+Eventra should not only help people create events.
+
+It should help people discover interesting events happening around them and online.
+
+Build Eventra Discover as a polished event discovery experience.
+
+4.1 Discovery audience
+
+Event discovery must be available to:
+
+* Registered Eventra organisers.
+* Registered Eventra attendees.
+* Visitors without Eventra accounts.
+
+Visitors should be able to explore public events without registering.
+
+An account should only be required when a person wants to use account-based features that require authentication.
+
+4.2 Discover page
+
+Create a dedicated Discover page.
+
+The page should contain:
+
+Hero section
+
+Headline:
+
+Discover events worth experiencing.
+
+Supporting text:
+
+Find exciting events, connect with communities and discover what’s happening around you.
+
+Include a prominent search bar.
+
+Example placeholder:
+
+Search events, categories or locations…
+
+Discovery sections
+
+Include the following sections:
+
+1. Featured Events.
+2. Events Near You.
+3. Trending Events.
+4. Happening This Week.
+5. Upcoming Events.
+6. Online Events.
+7. Events by Category.
+8. Recommended for You.
+
+Do not populate sections with fake events.
+
+Only display real public published events retrieved from the database.
+
+If there are no events, display a professional empty state.
+
+4.3 Location-based discovery
+
+Allow users to discover events by location.
+
+Provide a manual location selector.
+
+Users should be able to enter:
+
+* Country.
+* City.
+* Optional area or postcode.
+
+Do not require precise location permission.
+
+If location access is supported and the user explicitly grants permission, it may be used as an additional convenience.
+
+Never make precise location mandatory.
+
+Allow users to change their selected location.
+
+Implement nearby-event filtering using available location data.
+
+For the initial release, city and country matching is acceptable.
+
+Design the data architecture so geographical radius searches can be introduced later using appropriate geospatial capabilities.
+
+Do not invent distances or claim an event is nearby without reliable location information.
+
+4.4 Event categories
+
+Allow visitors to filter events by category.
+
+Include:
+
+* Business.
+* Conferences.
+* Workshops.
+* Education.
+* Technology.
+* Religion and Faith.
+* Church Events.
+* Music.
+* Entertainment.
+* Networking.
+* Community.
+* Charity.
+* Health and Wellness.
+* Sports.
+* Lifestyle.
+* Weddings and Celebrations.
+* Other.
+
+Provide a clean category navigation experience.
+
+4.5 Event search
+
+Implement functional search.
+
+Users should be able to search by:
+
+* Event name.
+* Keywords.
+* Category.
+* City.
+* Country.
+* Venue.
+
+Use Supabase queries with appropriate indexes and safe search handling.
+
+Do not implement a search bar that merely changes the text without filtering actual events.
+
+4.6 Discovery filters
+
+Provide filters for:
+
+* Location.
+* Category.
+* Date.
+* This week.
+* This weekend.
+* This month.
+* Online events.
+* Free events.
+* Paid events, when ticket pricing is implemented.
+* Upcoming events.
+
+Allow sorting by:
+
+* Relevance.
+* Soonest.
+* Recently published.
+* Popularity, only when supported by genuine engagement data.
+
+4.7 Personalised recommendations
+
+For authenticated users, introduce a basic interest-personalisation system.
+
+Allow users to select preferred event categories.
+
+Use these preferences to recommend relevant events.
+
+Recommendation signals may include:
+
+* Selected interests.
+* Preferred location.
+* Previous event interactions.
+* Events saved by the user.
+* Event popularity based on legitimate engagement.
+
+For visitors without accounts, use general discovery and location filters.
+
+Do not require AI for the first recommendation engine.
+
+Start with understandable, rule-based recommendations.
+
+4.8 Featured and promoted events
+
+Create a system that can eventually support promoted event placements.
+
+However, do not introduce paid advertising or sponsored placements yet.
+
+For now, featured events should be controlled through an authorised administrative mechanism.
+
+Never allow an organiser to make their own event appear as officially featured simply by changing a public database field.
+
+4.9 Event cards
+
+Each event card should show:
+
+* Event cover image.
+* Event title.
+* Date.
+* Time.
+* City or online status.
+* Event category.
+* Organiser name.
+* Free or paid status where known.
+* A View Event action.
+
+Use professional responsive cards.
+
+Do not overcrowd the cards.
+
+⸻
+
+5. EVENTRA EVENT PAGES — PUBLIC EVENT WEBSITES
+
+Every published public or unlisted event should have its own professional event page.
+
+This is important because organisers need a place to send people from WhatsApp, Instagram, Facebook, email and other channels.
+
+5.1 Unique event URLs
+
+Create readable public event URLs.
+
+Example:
+
+eventra.com/events/annual-leadership-conference
+
+Use unique, collision-resistant slugs.
+
+The public event page must resolve using the event slug.
+
+Do not expose internal sequential database IDs.
+
+Unlisted events should be accessible by their unique shareable URL but excluded from discovery.
+
+Private events must not be accessible through ordinary public event pages.
+
+5.2 Public event page design
+
+Create a beautiful, professional event page.
+
+Include:
+
+Header
+
+* Eventra branding.
+* Event title.
+* Event cover image.
+* Event category.
+
+Event details
+
+* Date.
+* Time.
+* Time zone.
+* Venue.
+* Location.
+* Online or physical format.
+
+Description
+
+Display the complete event description.
+
+Support appropriate text formatting.
+
+Organiser section
+
+* Organiser name.
+* Organisation name where applicable.
+* Organiser logo where available.
+* Organiser description where available.
+
+Registration section
+
+Show an appropriate registration action.
+
+Depending on the event configuration, the action should be:
+
+* Register Now.
+* RSVP.
+* Request an Invitation.
+* Registration Closed.
+
+Additional information
+
+Allow organisers to provide:
+
+* Event website.
+* Contact information.
+* Event programme or schedule.
+* Frequently asked questions.
+* Important event instructions.
+
+Only show sections that contain actual information.
+
+5.3 Social sharing
+
+Provide functional sharing options:
+
+* Copy event link.
+* WhatsApp sharing.
+* Facebook sharing.
+* LinkedIn sharing.
+* Email sharing.
+* Native device sharing where supported.
+
+Generate appropriate share metadata:
+
+* Event title.
+* Event description.
+* Event cover image.
+* Event URL.
+
+Ensure shared links generate appropriate social previews where supported.
+
+5.4 Event page analytics
+
+Prepare basic event page analytics.
+
+Track genuine events such as:
+
+* Page views.
+* Registration button clicks.
+* Invitation link clicks where measurable.
+
+Avoid counting every refresh as a completely new unique visitor.
+
+Respect applicable privacy and cookie requirements.
+
+Do not collect unnecessary personal information.
+
+⸻
+
+6. EVENTRA INVITE — DIGITAL INVITATIONS
+
+Develop an invitation management module.
+
+Organisers should be able to invite people to their events and monitor responses.
+
+6.1 Invitation creation
+
+Allow organisers to create an invitation.
+
+Include:
+
+* Event selection.
+* Invitation title.
+* Personalised invitation message.
+* Optional invitation cover image.
+* RSVP deadline.
+* Invitation expiry where appropriate.
+
+The event’s existing details should automatically populate relevant invitation information.
+
+6.2 Guest management
+
+Allow organisers to:
+
+* Add individual guests.
+* Add multiple guests.
+* Import a CSV guest list where feasible.
+* Enter guest names.
+* Enter email addresses.
+* Enter phone numbers where required.
+* Assign guest groups or categories.
+* View invitation status.
+
+Do not require unnecessary personal information.
+
+6.3 Invitation links
+
+Generate secure, unique invitation links.
+
+Each invitation should have a unique token.
+
+Example:
+
+eventra.com/invite/unique-invitation-token
+
+The token must not expose internal database identifiers.
+
+The invitation page should show:
+
+* Event details.
+* Personalised invitation message.
+* Guest name where appropriate.
+* RSVP options.
+
+6.4 RSVP functionality
+
+Guests should be able to respond:
+
+* Accept.
+* Decline.
+* Maybe.
+
+Allow organisers to configure which responses are available.
+
+Where appropriate, collect:
+
+* Number of accompanying guests.
+* Dietary preferences.
+* Optional message.
+* Additional information requested by the organiser.
+
+Allow the organiser to configure guest limits.
+
+6.5 Invitation status
+
+Track:
+
+* Draft.
+* Sent.
+* Delivered, only when verified by an integrated provider.
+* Opened, only where reliable tracking is available.
+* Accepted.
+* Declined.
+* Maybe.
+* Expired.
+
+Do not falsely mark an invitation as delivered or opened when no delivery or tracking integration exists.
+
+6.6 Invitation delivery
+
+Build a provider-ready architecture for future email and messaging integration.
+
+If no email or SMS provider is configured:
+
+* Allow organisers to copy invitation links.
+* Allow organisers to share invitations through WhatsApp.
+* Allow organisers to copy invitation messages.
+* Clearly communicate that automatic delivery is not configured.
+
+Do not pretend emails or SMS messages have been sent.
+
+Keep delivery functionality separate from invitation creation and RSVP management.
+
+⸻
+
+7. EVENTRA REGISTER — ONLINE EVENT REGISTRATION
+
+Build a flexible event registration system.
+
+This feature must be connected to Eventra Manage and Eventra Event Pages.
+
+7.1 Registration settings
+
+Organisers should be able to enable or disable registration for an event.
+
+Allow configuration of:
+
+* Registration opening date.
+* Registration closing date.
+* Maximum attendee capacity.
+* Registration limit per person where appropriate.
+* Registration confirmation behaviour.
+* Required and optional form fields.
+* Registration status.
+
+7.2 Registration form builder
+
+Create a simple registration form builder.
+
+Default fields:
+
+* First name.
+* Last name.
+* Email address.
+
+Optional fields:
+
+* Phone number.
+* Organisation.
+* Job title.
+* City.
+* Country.
+
+Allow organisers to add custom questions.
+
+Supported question types should include:
+
+* Short text.
+* Long text.
+* Single choice.
+* Multiple choice.
+* Dropdown.
+* Yes/No.
+* Number.
+
+Allow organisers to mark fields as required or optional.
+
+Validate the form before submission.
+
+Do not build an unnecessarily complex form builder in this first release.
+
+7.3 Participant registration
+
+Visitors should be able to register without creating an Eventra account.
+
+The process should be simple:
+
+1. Open the event page.
+2. Click Register Now.
+3. Complete the registration form.
+4. Submit the form.
+5. Receive a clear confirmation.
+6. Receive a registration reference.
+
+Where email delivery is not configured, show the confirmation on screen and provide an appropriate next step.
+
+Do not claim that a confirmation email has been sent unless it has actually been delivered through an integrated provider.
+
+7.4 Registration statuses
+
+Support:
+
+* Pending.
+* Confirmed.
+* Cancelled.
+* Waitlisted.
+* Rejected, where organiser approval is enabled.
+
+For the initial implementation, allow organisers to choose between:
+
+* Automatic confirmation.
+* Manual approval.
+
+Default to automatic confirmation.
+
+7.5 Capacity management
+
+If an event has a maximum attendee capacity:
+
+* Prevent registrations beyond the limit.
+* Handle simultaneous submissions safely.
+* Display when an event is full.
+* Allow registration to close automatically when capacity is reached.
+
+Use transactional database operations or secure server-side logic to prevent overbooking.
+
+7.6 Attendee management
+
+Provide organisers with an attendee management page.
+
+Display:
+
+* Attendee name.
+* Email.
+* Registration date.
+* Registration status.
+* Registration reference.
+
+Allow organisers to:
+
+* Search attendees.
+* Filter by status.
+* View registration details.
+* Export attendee data to CSV.
+* Cancel registrations where authorised.
+* Approve pending registrations.
+
+Protect attendee personal information.
+
+Only authorised organisers should access their event’s registration records.
+
+⸻
+
+8. CONNECT EVENTRA CREATE TO THE NEW EVENT SYSTEM
+
+The existing Eventra Create feature must remain fully functional.
+
+It should become part of the event management workspace.
+
+For every eligible event, the organiser should be able to access Eventra Create.
+
+The organiser should be able to:
+
+* Upload the original event flyer.
+* Configure photo placement.
+* Configure name placement.
+* Publish the personalised flyer experience.
+* Copy the participant link.
+* View flyer generation activity.
+
+Do not force organisers to create a second event simply to use Eventra Create.
+
+Where the existing implementation has separate event records, safely map or migrate the relationships without losing existing participant data.
+
+The public participant flyer-generation flow must continue to work without requiring participant accounts.
+
+Maintain the existing photo, name and export functionality.
+
+⸻
+
+9. ORGANISER DASHBOARD REDESIGN
+
+Upgrade the organiser dashboard so it becomes the central control panel for Eventra.
+
+9.1 Dashboard layout
+
+Include:
+
+Welcome section
+
+Personalised greeting.
+
+Show the current organisation or workspace where applicable.
+
+Quick actions
+
+* Create Event.
+* Discover Events.
+* Manage My Events.
+* Create Personalised Flyer.
+* Invite Guests.
+
+Analytics cards
+
+Show real data:
+
+* Total Events.
+* Published Events.
+* Total Registrations.
+* Confirmed Attendees.
+* Pending RSVPs.
+* Flyer Generations.
+
+Use only actual database information.
+
+My Upcoming Events
+
+Show events created or managed by the current user.
+
+Display:
+
+* Event image.
+* Event title.
+* Date.
+* Status.
+* Registration count.
+* Quick management actions.
+
+Recent Activity
+
+Show meaningful events such as:
+
+* Event published.
+* New registration received.
+* Invitation accepted.
+* Invitation declined.
+* Flyer generated.
+* Event details updated.
+
+Discover Events
+
+Introduce a section titled:
+
+“Events You Might Like”
+
+Show relevant public events created by other Eventra organisers.
+
+The dashboard should be useful to organisers without becoming overcrowded.
+
+⸻
+
+10. EVENTRA DISCOVER ON THE DASHBOARD
+
+This is a particularly important new capability.
+
+When an organiser logs in, they should not only see their own event analytics.
+
+They should also discover relevant events created by other organisers.
+
+Create a dedicated dashboard section.
+
+Title:
+
+Events You Might Like
+
+Supporting text:
+
+Discover events, connect with communities and find your next experience.
+
+Display:
+
+* Events near the user’s selected location.
+* Upcoming events.
+* Events matching selected interests.
+* Popular public events.
+* Online events.
+* Events from other organisers.
+
+Do not show the user’s own events in this recommendation section unless there is a clear reason.
+
+Do not show private events.
+
+Do not show unpublished events.
+
+Do not show cancelled events as active recommendations.
+
+Provide:
+
+* View All.
+* Change Location.
+* Explore Categories.
+
+The dashboard recommendation area should link to the full Eventra Discover experience.
+
+⸻
+
+11. ATTENDEE EXPERIENCE AND USER ACCOUNTS
+
+Eventra must also support people who attend events.
+
+Do not force an attendee to become an organiser.
+
+An attendee should eventually have a personal Eventra account.
+
+For this stage, implement a basic attendee account experience.
+
+Users should be able to:
+
+* Register.
+* Log in.
+* Manage their profile.
+* Select interests.
+* Select a preferred location.
+* Save events.
+* View their registered events.
+* View invitations.
+* Manage RSVP responses.
+
+A user may be both an organiser and an attendee.
+
+Do not create completely separate authentication systems for organisers and attendees.
+
+Use one Supabase authentication system with appropriate profiles and permissions.
+
+Participants using the existing Eventra Create public link must still be able to generate their flyer without creating an account.
+
+⸻
+
+12. EVENT SAVING AND INTERESTS
+
+Introduce basic event bookmarking.
+
+Authenticated users should be able to save public events.
+
+Create a Saved Events area.
+
+Allow users to remove saved events.
+
+Create an interest-selection experience.
+
+Users should be able to select preferred categories such as:
+
+* Business.
+* Technology.
+* Conferences.
+* Education.
+* Faith.
+* Music.
+* Community.
+* Networking.
+* Sports.
+* Lifestyle.
+
+Use these preferences to improve recommendations.
+
+Users must be able to edit their interests later.
+
+Do not use invasive tracking.
+
+⸻
+
+13. DATABASE ARCHITECTURE
+
+First inspect the existing Supabase database.
+
+Extend existing tables rather than creating unnecessary duplicates.
+
+Use safe migrations.
+
+The following is the target conceptual data model.
+
+Adapt field names and relationships to the actual existing project.
+
+13.1 Existing core entities
+
+Preserve and evolve:
+
+* profiles.
+* organisations.
+* organisation_members.
+* events.
+* flyer_templates.
+* participants.
+* flyer_downloads.
+
+13.2 Additional event fields
+
+Ensure events can support:
+
+* title.
+* slug.
+* description.
+* category.
+* cover_image_url.
+* event_date.
+* start_time.
+* end_time.
+* timezone.
+* venue_name.
+* address.
+* city.
+* country.
+* event_type.
+* online_url.
+* publication_status.
+* visibility.
+* registration_status.
+* capacity.
+* registration_open_at.
+* registration_close_at.
+* created_by.
+* organisation_id.
+* created_at.
+* updated_at.
+
+Use appropriate data types.
+
+13.3 Event registrations
+
+Create or evolve an event_registrations table.
+
+Suggested fields:
+
+* id.
+* event_id.
+* attendee_user_id, nullable for guest registration.
+* first_name.
+* last_name.
+* email.
+* phone, optional.
+* registration_reference.
+* status.
+* custom_answers.
+* created_at.
+* updated_at.
+
+13.4 Registration form configuration
+
+Create event_registration_forms.
+
+Suggested fields:
+
+* id.
+* event_id.
+* form_schema.
+* is_enabled.
+* approval_required.
+* created_at.
+* updated_at.
+
+13.5 Invitations
+
+Create event_invitations.
+
+Suggested fields:
+
+* id.
+* event_id.
+* invited_name.
+* invited_email.
+* invited_phone, optional.
+* invitation_token.
+* message.
+* status.
+* rsvp_response.
+* guest_count.
+* rsvp_deadline.
+* created_by.
+* created_at.
+* updated_at.
+
+13.6 Saved events
+
+Create saved_events.
+
+Suggested fields:
+
+* id.
+* user_id.
+* event_id.
+* created_at.
+
+Prevent duplicate saves for the same user and event.
+
+13.7 User interests
+
+Create user_interests.
+
+Suggested fields:
+
+* id.
+* user_id.
+* category.
+* created_at.
+
+Prevent duplicate interests.
+
+13.8 Event analytics
+
+Create an appropriate event_analytics or event_activity system.
+
+Track meaningful events such as:
+
+* Event page view.
+* Registration submitted.
+* Invitation accepted.
+* Invitation declined.
+* Flyer generated.
+* Event saved.
+
+Avoid collecting unnecessary personal information.
+
+Use suitable indexes and aggregation queries.
+
+Do not expose analytics records publicly.
+
+13.9 Database quality
+
+Use:
+
+* Foreign keys.
+* Unique constraints.
+* Appropriate indexes.
+* Created and updated timestamps.
+* Safe deletion policies.
+* Transactional operations where required.
+
+Avoid duplicating existing records.
+
+Do not run destructive schema changes.
+
+⸻
+
+14. SUPABASE SECURITY AND PRIVACY
+
+Security is essential because Eventra will handle personal information.
+
+Implement appropriate Row Level Security policies.
+
+Organisers
+
+Organisers should only manage events they own or have permission to manage through their organisation.
+
+Attendees
+
+Attendees should only access their own account-based registrations, saved events and personal information.
+
+Public visitors
+
+Public visitors should only access published public event information.
+
+Unlisted events must not appear in public discovery.
+
+Private events must remain private.
+
+Registration submissions
+
+Public registration submissions should be processed through secure operations.
+
+Do not grant unrestricted anonymous SELECT access to event registrations.
+
+Do not allow participants to view other participants’ personal information.
+
+Invitation links
+
+Use unique, high-entropy invitation tokens.
+
+Do not expose sequential database IDs.
+
+Validate invitation access and response permissions.
+
+Organiser permissions
+
+Every event-management action must verify ownership or authorised organisation membership.
+
+Data handling
+
+* Never expose service-role keys.
+* Validate user input.
+* Validate uploads.
+* Apply file-size limits.
+* Use signed URLs where appropriate.
+* Avoid unnecessary personal data collection.
+* Provide appropriate deletion and retention mechanisms.
+* Protect against duplicate registration submissions.
+* Rate-limit public forms.
+
+Implement privacy-conscious analytics and avoid unnecessary tracking cookies.
+
+⸻
+
+15. DESIGN SYSTEM AND USER EXPERIENCE
+
+The entire Stage 1 experience must follow the existing Eventra brand.
+
+Brand name: EVENTRA.
+
+Tagline: Events. Elevated.
+
+Primary purple: #6425E8.
+
+Deep violet: #4214B8.
+
+Accent purple: #9638F5.
+
+Dark navy: #111126.
+
+Background: #F8F8FC.
+
+Use the supplied Eventra logo.
+
+Maintain consistent typography, spacing, buttons, navigation, cards and form styles.
+
+Design inspiration:
+
+* Linear.
+* Stripe.
+* Notion.
+* Framer.
+* Modern event discovery platforms.
+* Premium SaaS dashboards.
+
+Do not copy these products.
+
+The visual direction should be clean, premium, modern and intuitive.
+
+Avoid generic AI-looking interfaces.
+
+Use appropriate loading skeletons, empty states, error messages, success states and confirmation dialogs.
+
+Ensure the entire experience is responsive.
+
+The event discovery experience should feel like a polished consumer-facing product.
+
+The organiser workspace should feel like a professional SaaS dashboard.
+
+The event public pages should feel like attractive standalone event websites.
+
+⸻
+
+16. EMAIL AND MESSAGING INTEGRATION READINESS
+
+Prepare the architecture for future delivery integrations.
+
+Potential capabilities include:
+
+* Registration confirmation emails.
+* Invitation emails.
+* RSVP reminders.
+* Event reminders.
+* Event announcements.
+
+Do not invent a working email service.
+
+If an email provider is not configured:
+
+* Allow invitation link copying.
+* Allow WhatsApp sharing.
+* Show clear delivery status.
+* Keep the delivery provider architecture separate.
+
+Never mark an email as sent unless a configured provider has confirmed the relevant operation.
+
+⸻
+
+17. RECOMMENDED DEVELOPMENT ORDER
+
+Implement Stage 1 incrementally in this order.
+
+PHASE A — AUDIT AND FOUNDATION
+
+* Inspect the existing project.
+* Review Supabase schema.
+* Review authentication.
+* Review existing event records.
+* Review Eventra Create.
+* Identify migration requirements.
+* Prepare the implementation plan.
+
+PHASE B — EVENTRA MANAGE
+
+* Improve event creation.
+* Add event details and cover images.
+* Add public, unlisted and private visibility.
+* Add publication statuses.
+* Improve event editing.
+* Create the event management workspace.
+
+PHASE C — EVENTRA EVENT PAGES
+
+* Create public event pages.
+* Implement unique event slugs.
+* Add social sharing.
+* Add registration actions.
+* Add organiser details.
+* Support responsive design.
+
+PHASE D — EVENTRA REGISTER
+
+* Build registration settings.
+* Build the form builder.
+* Implement guest registration.
+* Implement automatic confirmation.
+* Implement manual approval.
+* Implement attendee management.
+* Implement capacity controls.
+
+PHASE E — EVENTRA INVITE
+
+* Create invitation management.
+* Generate invitation links.
+* Implement RSVP responses.
+* Add guest management.
+* Add invitation status tracking.
+* Implement shareable invitation workflows.
+
+PHASE F — EVENTRA DISCOVER
+
+* Build the discovery page.
+* Add event search.
+* Add category filters.
+* Add location selection.
+* Add date filters.
+* Add featured and upcoming events.
+* Add interest-based recommendations.
+* Add saved events.
+
+PHASE G — DASHBOARD INTEGRATION
+
+* Upgrade organiser dashboard.
+* Add event analytics.
+* Add upcoming events.
+* Add Events You Might Like.
+* Add recent activity.
+* Add attendee account views.
+* Integrate Eventra Create into each event workspace.
+
+PHASE H — QUALITY ASSURANCE
+
+Test all modules together.
+
+Verify permissions.
+
+Verify database operations.
+
+Verify event visibility.
+
+Verify mobile responsiveness.
+
+Verify existing Eventra Create functionality.
+
+Fix errors before declaring the work complete.
+
+⸻
+
+18. ACCEPTANCE TESTS
+
+The Stage 1 implementation must pass these tests.
+
+Event management
+
+1. An organiser can create an event.
+2. An organiser can edit an event.
+3. An organiser can save an event as a draft.
+4. An organiser can publish an event.
+5. An organiser can change visibility.
+6. An organiser can cancel or archive an event.
+
+Event pages
+
+7. A public published event has a working public page.
+8. An unlisted event is accessible by its link but excluded from discovery.
+9. A private event is not accessible through public event pages.
+10. Event sharing links work.
+
+Event discovery
+
+11. Visitors can explore public events without accounts.
+12. Users can search by event name.
+13. Users can filter by category.
+14. Users can filter by location.
+15. Users can filter by date.
+16. Users can save events when authenticated.
+17. Recommendations use real event data.
+18. Private and unpublished events never appear in discovery.
+
+Invitations
+
+19. Organisers can create invitations.
+20. Guests can open invitation links.
+21. Guests can accept, decline or respond maybe.
+22. Organisers can view RSVP responses.
+23. Invitation tokens are secure.
+
+Registrations
+
+24. Organisers can enable registration.
+25. Visitors can register without creating an account.
+26. Registration submissions are stored correctly.
+27. Organisers can view attendees.
+28. Organisers can approve registrations where enabled.
+29. Capacity restrictions are enforced.
+30. Duplicate and abusive submissions are appropriately handled.
+
+Eventra Create
+
+31. Existing organisers can still access Eventra Create.
+32. Existing participant links still work.
+33. Participants do not need accounts.
+34. Participants can still upload photographs.
+35. Participants can still generate personalised flyers.
+36. PNG, JPG and PDF downloads still work.
+
+Security
+
+37. Organisers cannot access unauthorised events.
+38. Attendees cannot access other attendees’ private information.
+39. Public users cannot query private registrations.
+40. Supabase service-role keys remain server-side.
+
+General
+
+41. Dashboard metrics reflect actual database data.
+42. Navigation works.
+43. Forms validate correctly.
+44. Desktop and mobile layouts work.
+45. Existing user accounts and data are preserved.
+46. No critical build errors remain.
+
+⸻
+
+19. IMPORTANT PRODUCT DECISIONS
+
+Apply these decisions consistently:
+
+* Eventra serves both organisers and attendees.
+* Public event discovery is accessible without an account.
+* Organisers control whether an event is public, unlisted or private.
+* Only published public events appear in Discover.
+* Unlisted events can be shared directly.
+* Private events require authorised access.
+* Participants can register without creating accounts.
+* Invitation recipients can respond through secure invitation links.
+* Registered users can save events and personalise recommendations.
+* Users may act as both organisers and attendees.
+* Eventra Create remains the existing first product capability.
+* Supabase remains the backend.
+* New capabilities must integrate with the existing event system.
+
+⸻
+
+20. FINAL IMPLEMENTATION INSTRUCTION
+
+Build Stage 1 as one connected Eventra ecosystem.
+
+Do not create disconnected features.
+
+The organiser must be able to create an event, publish it, discover how it appears publicly, share it, invite people, collect registrations and manage attendees from one integrated platform.
+
+The attendee must be able to discover events, view event details, receive invitations, register and manage their event interests.
+
+The existing Eventra Create experience must remain fully functional and connected to the event workspace.
+
+The result must feel like a serious, scalable international SaaS product.
+
+Start with a complete audit of the existing application.
+
+Present the implementation plan and database migration risks before making structural or destructive changes.
+
+Then execute the work incrementally, test each module and preserve existing functionality.
+
+Do not claim any capability is complete until it has been implemented and tested.
+
+We are building EVENTRA — Events. Elevated.
+
+Our goal is to become a platform where people create events, discover events, connect with people and manage the entire event experience.

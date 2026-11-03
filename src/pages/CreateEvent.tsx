@@ -1,28 +1,59 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { db } from '../lib/storage-and-db';
 import { uploadFlyerFile } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { createSampleFlyerDataUrl } from '../lib/sample-flyers';
 import { storeFileInIDB } from '../lib/storage-and-db';
-import { EventraLogo } from '../components/EventraLogo';
+import { Navbar } from '../components/Navbar';
 import { 
-  Upload, ArrowLeft, Loader2, AlertCircle, FileImage, Layers,
-  Calendar, MapPin, Tag, ArrowRight
+  Upload, ArrowLeft, Loader2, AlertCircle, FileImage, 
+  Calendar, MapPin, Tag, ArrowRight, Sparkles, Globe, Lock, Shield
 } from 'lucide-react';
+
+const CATEGORIES = [
+  'Business',
+  'Conferences',
+  'Workshops',
+  'Education',
+  'Technology',
+  'Religion and Faith',
+  'Church Events',
+  'Music',
+  'Entertainment',
+  'Networking',
+  'Community',
+  'Charity',
+  'Health and Wellness',
+  'Sports',
+  'Lifestyle',
+  'Weddings and Celebrations',
+  'Other',
+];
 
 export const CreateEvent: React.FC = () => {
   const navigate = useNavigate();
-  const { user, currentOrg } = useAuth();
+  const { user, currentOrg, profile } = useAuth();
 
   const [eventName, setEventName] = useState('');
-  const [category, setCategory] = useState('Technology & Business');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('Technology');
+  const [format, setFormat] = useState<'physical' | 'online' | 'hybrid'>('physical');
+  const [onlineUrl, setOnlineUrl] = useState('');
   const [venue, setVenue] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [country, setCountry] = useState('');
   const [eventDate, setEventDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [timezone, setTimezone] = useState('UTC');
+  const [visibility, setEditVisibility] = useState<'public' | 'unlisted' | 'private'>('public');
+  const [capacity, setCapacity] = useState(500);
+
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [nameTextColor, setNameTextColor] = useState('#FFFFFF');
   const [error, setError] = useState<string | null>(null);
 
   const generateSlug = (text: string) => {
@@ -49,116 +80,10 @@ export const CreateEvent: React.FC = () => {
     }
   };
 
-  const handleCreateWithPreset = async (type: 'tech' | 'gala' | 'music', name: string) => {
-    setLoading(true);
-    try {
-      const dataUrl = createSampleFlyerDataUrl(type);
-      const storageKey = `event-flyers/preset-${type}-${Date.now()}.jpg`;
-      await storeFileInIDB(storageKey, dataUrl);
-
-      const evId = `ev_${Date.now()}`;
-      const slug = generateSlug(name);
-
-      const newEvent = db.saveEvent({
-        id: evId,
-        user_id: user?.id || '',
-        org_id: currentOrg?.id || user?.id || '',
-        event_name: name,
-        slug: slug,
-        original_flyer_path: storageKey,
-        original_flyer_data_url: dataUrl,
-        category: type === 'tech' ? 'Technology & AI' : type === 'gala' ? 'Gala & Worship' : 'Arts & Music',
-        venue: type === 'tech' ? 'Moscone Center, SF' : type === 'gala' ? 'Grand Symphony Hall' : 'Open Air Arena',
-        event_date: 'Fall 2026',
-        status: 'draft',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-
-      // Template defaults
-      if (type === 'tech') {
-        db.saveTemplate({
-          id: `tmpl_${Date.now()}`,
-          event_id: evId,
-          photo_x: 0.35,
-          photo_y: 0.27,
-          photo_width: 0.30,
-          photo_height: 0.30,
-          photo_shape: 'circle',
-          name_x: 0.15,
-          name_y: 0.60,
-          name_width: 0.70,
-          name_height: 0.08,
-          font_family: 'Plus Jakarta Sans, sans-serif',
-          font_size: 42,
-          font_weight: '700',
-          text_color: '#FFFFFF',
-          text_alignment: 'center',
-          max_lines: 1,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-      } else if (type === 'gala') {
-        db.saveTemplate({
-          id: `tmpl_${Date.now()}`,
-          event_id: evId,
-          photo_x: 0.31,
-          photo_y: 0.32,
-          photo_width: 0.38,
-          photo_height: 0.38,
-          photo_shape: 'circle',
-          name_x: 0.15,
-          name_y: 0.725,
-          name_width: 0.70,
-          name_height: 0.055,
-          font_family: 'Playfair Display, serif',
-          font_size: 46,
-          font_weight: '700',
-          text_color: '#FACC15',
-          text_alignment: 'center',
-          max_lines: 1,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-      } else {
-        db.saveTemplate({
-          id: `tmpl_${Date.now()}`,
-          event_id: evId,
-          photo_x: 0.35,
-          photo_y: 0.29,
-          photo_width: 0.30,
-          photo_height: 0.30,
-          photo_shape: 'rectangle',
-          name_x: 0.15,
-          name_y: 0.61,
-          name_width: 0.70,
-          name_height: 0.08,
-          font_family: 'Plus Jakarta Sans, sans-serif',
-          font_size: 44,
-          font_weight: '800',
-          text_color: '#FFFFFF',
-          text_alignment: 'center',
-          max_lines: 1,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-      }
-
-      navigate(`/editor/${newEvent.id}`);
-    } catch (e: any) {
-      setError(e.message || 'Error creating event');
-      setLoading(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eventName.trim()) {
-      setError('Please provide an event name.');
-      return;
-    }
-    if (!file) {
-      setError('Please upload an event flyer design.');
+      setError('Please provide an event title.');
       return;
     }
 
@@ -166,326 +91,399 @@ export const CreateEvent: React.FC = () => {
     setError(null);
 
     try {
-      const uploadRes = await uploadFlyerFile(file, user?.id || 'anon');
-      const slug = generateSlug(eventName);
+      let flyerPath = '';
+      let flyerDataUrl = '';
+
+      if (file) {
+        const uploadResult = await uploadFlyerFile(file, user?.id || 'anon');
+        flyerPath = uploadResult.path;
+        flyerDataUrl = uploadResult.dataUrl;
+      } else {
+        // Default clean artwork template based on category
+        const type = category === 'Music' ? 'music' : category.includes('Faith') || category.includes('Church') ? 'gala' : 'tech';
+        flyerDataUrl = createSampleFlyerDataUrl(type);
+        flyerPath = `event-flyers/default-${type}-${Date.now()}.jpg`;
+        await storeFileInIDB(flyerPath, flyerDataUrl);
+      }
+
       const evId = `ev_${Date.now()}`;
+      const slug = generateSlug(eventName);
 
       const newEvent = db.saveEvent({
         id: evId,
         user_id: user?.id || '',
         org_id: currentOrg?.id || user?.id || '',
-        event_name: eventName.trim(),
+        event_name: eventName,
+        title: eventName,
+        description: description,
         slug: slug,
-        original_flyer_path: uploadRes.path,
-        original_flyer_data_url: uploadRes.dataUrl,
-        category,
-        venue: venue || 'Main Event Venue',
+        original_flyer_path: flyerPath,
+        original_flyer_data_url: flyerDataUrl,
+        cover_image_url: flyerPath,
+        category: category,
+        event_type: format,
+        online_url: onlineUrl,
+        venue: venue,
+        address: address,
+        city: city || (format === 'online' ? 'Online' : 'Global'),
+        country: country || (format === 'online' ? 'Online' : 'Global'),
         event_date: eventDate || 'Upcoming',
-        status: 'draft',
+        start_time: startTime || '9:00 AM',
+        end_time: endTime || '5:00 PM',
+        timezone: timezone,
+        visibility: visibility,
+        status: 'published',
+        registration_status: 'open',
+        capacity: capacity,
+        organiser_name: profile?.full_name || currentOrg?.name || 'Event Organiser',
+        organiser_email: user?.email || '',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
 
-      // Default Template
+      // Default flyer template coordinates so Eventra Create works out of the box
       db.saveTemplate({
-        id: `tmpl_${Date.now()}`,
+        id: `tmpl_${evId}`,
         event_id: evId,
-        photo_x: 0.31,
-        photo_y: 0.32,
-        photo_width: 0.38,
-        photo_height: 0.38,
+        photo_x: 0.35,
+        photo_y: 0.30,
+        photo_width: 0.30,
+        photo_height: 0.30,
         photo_shape: 'circle',
-        name_x: 0.15,
-        name_y: 0.725,
-        name_width: 0.70,
-        name_height: 0.055,
+        name_x: 0.20,
+        name_y: 0.65,
+        name_width: 0.60,
+        name_height: 0.06,
         font_family: 'Plus Jakarta Sans, sans-serif',
-        font_size: 44,
-        font_weight: '700',
-        text_color: nameTextColor,
+        font_size: 42,
+        font_weight: '800',
+        text_color: '#111126',
         text_alignment: 'center',
         max_lines: 1,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
 
-      navigate(`/editor/${newEvent.id}`);
+      // Navigate straight to the dedicated Event Workspace
+      navigate(`/events/manage/${evId}`);
     } catch (err: any) {
-      setError(err.message || 'Error uploading flyer.');
+      console.error(err);
+      setError(err?.message || 'Failed to create event. Please try again.');
+    } finally {
       setLoading(false);
     }
   };
 
-  const [isDraggingOver, setIsDraggingOver] = useState(false);
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingOver(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingOver(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) {
-      if (!['image/jpeg', 'image/png', 'image/webp'].includes(f.type)) {
-        setError('Only PNG, JPG, and WebP flyers are supported.');
-        return;
-      }
-      setFile(f);
-      setFilePreview(URL.createObjectURL(f));
-      setError(null);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-[#F8F8FC] py-10 px-4 flex flex-col items-center font-sans">
-      <div className="w-full max-w-xl animate-slide-up-fade">
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="interactive-btn inline-flex items-center space-x-2 text-xs font-semibold text-[#73738A] hover:text-[#111126] mb-6 transition"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to Eventra Dashboard</span>
-        </button>
+    <div className="min-h-screen bg-[#F8F8FC] flex flex-col font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8]">
+      <Navbar />
 
-        <div className="bg-white rounded-2xl border border-[#E9E8F0] p-5 sm:p-8 shadow-sm">
-          <div className="mb-6 pb-6 border-b border-[#E9E8F0] flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] font-bold text-[#6425E8] uppercase tracking-wider bg-[#6425E8]/10 px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#6425E8] animate-pulse" />
-                  Eventra Create
-                </span>
-                <span className="text-[11px] text-[#73738A]">· {currentOrg?.name}</span>
-              </div>
-              <h1 className="text-xl font-bold text-[#111126]">Create New Event</h1>
-              <p className="text-xs text-[#73738A] mt-1 leading-relaxed">
-                Provide your event details and flyer design. You will then position the personalized photo and name areas.
-              </p>
-            </div>
-            <div className="hidden sm:block">
-              <EventraLogo variant="symbol" size="lg" />
-            </div>
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 w-full flex-1">
+        <div className="mb-6 flex items-center justify-between">
+          <Link to="/dashboard" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#73738A] hover:text-[#111126]">
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Dashboard</span>
+          </Link>
+        </div>
+
+        <div className="bg-white rounded-3xl border border-[#E9E8F0] shadow-sm p-6 sm:p-10 space-y-8">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#6425E8]">
+              Eventra Manage
+            </span>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111126] mt-1">Create New Event</h1>
+            <p className="text-xs text-[#73738A] mt-1">
+              Configure your event details, set visibility, enable online registration, and prepare attendee flyers.
+            </p>
           </div>
 
           {error && (
-            <div className="p-3 mb-6 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center space-x-2 animate-scale-up">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                Event Name
-              </label>
-              <input
-                type="text"
-                required
-                value={eventName}
-                onChange={(e) => setEventName(e.target.value)}
-                placeholder="e.g. World Technology Leadership Summit 2026"
-                className="w-full px-4 py-2.5 bg-white border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                  Event Category
-                </label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#E9E8F0] rounded-xl text-xs font-medium"
-                >
-                  <option value="Technology & Business">Technology & Business</option>
-                  <option value="Conference & Summit">Conference & Summit</option>
-                  <option value="Gala & Awards Dinner">Gala & Awards Dinner</option>
-                  <option value="Worship & Faith Gathering">Worship & Faith Gathering</option>
-                  <option value="Creative & Design Festival">Creative & Design Festival</option>
-                  <option value="Community & Networking">Community & Networking</option>
-                </select>
-              </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Section 1: Basic Event Details */}
+            <div className="space-y-4">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-[#111126] pb-2 border-b border-[#F0F0F5]">
+                1. Basic Information
+              </h2>
 
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                  Venue / Location
+                  Event Title <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
-                  value={venue}
-                  onChange={(e) => setVenue(e.target.value)}
-                  placeholder="e.g. Grand Ballroom or Virtual"
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#E9E8F0] rounded-xl text-xs"
+                  required
+                  value={eventName}
+                  onChange={(e) => setEventName(e.target.value)}
+                  placeholder="e.g. Next Horizon AI Summit 2026"
+                  className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-sm font-semibold text-[#111126] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition"
                 />
               </div>
-            </div>
 
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                Flyer Image Asset (PNG, JPG, or WebP)
-              </label>
-              <input
-                type="file"
-                id="flyer-file-upload"
-                accept="image/png, image/jpeg, image/webp"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-
-              {!filePreview ? (
-                <label
-                  htmlFor="flyer-file-upload"
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all ${
-                    isDraggingOver
-                      ? 'border-[#6425E8] bg-[#6425E8]/10 scale-[1.01]'
-                      : 'border-[#E9E8F0] hover:border-[#6425E8] bg-[#F8F8FC] hover:bg-white'
-                  }`}
-                >
-                  <div className="w-12 h-12 rounded-2xl bg-[#6425E8]/10 flex items-center justify-center text-[#6425E8] mb-3">
-                    <Upload className="w-6 h-6" />
-                  </div>
-                  <span className="text-xs font-bold text-[#111126]">
-                    {isDraggingOver ? 'Drop flyer artwork here' : 'Click or drag flyer artwork to upload'}
-                  </span>
-                  <span className="text-[11px] text-[#73738A] mt-1">PNG, JPG, WebP up to 25MB</span>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
+                  Event Description
                 </label>
-              ) : (
-                <div className="border border-[#E9E8F0] rounded-2xl p-3 flex items-center space-x-4 bg-[#F8F8FC] animate-scale-up">
-                  <img
-                    src={filePreview}
-                    alt="Preview"
-                    className="w-16 h-20 object-cover rounded-xl border border-[#CBD5E1]"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-[#111126] truncate">{file?.name}</p>
-                    <label
-                      htmlFor="flyer-file-upload"
-                      className="text-xs text-[#6425E8] hover:underline cursor-pointer block mt-1 font-semibold"
-                    >
-                      Choose another file
-                    </label>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Name Text Color Selector */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-[#73738A]">
-                  Participant Name Color
-                </label>
-                <span className="text-xs font-mono font-bold text-[#111126]">{nameTextColor}</span>
+                <textarea
+                  rows={4}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Describe the schedule, key ministers/speakers, registration highlights, and what attendees can expect..."
+                  className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs text-[#111126] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition leading-relaxed"
+                />
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {[
-                  { label: 'White Text', hex: '#FFFFFF', desc: 'Dark flyers' },
-                  { label: 'Dark Navy', hex: '#111126', desc: 'Light/White banners' },
-                  { label: 'Gold Text', hex: '#F59E0B', desc: 'Luxury / Worship' },
-                  { label: 'Eventra Purple', hex: '#6425E8', desc: 'Brand accent' },
-                ].map((c) => (
-                  <button
-                    key={c.hex}
-                    type="button"
-                    onClick={() => setNameTextColor(c.hex)}
-                    className={`p-2.5 rounded-xl border text-left transition ${
-                      nameTextColor === c.hex
-                        ? 'border-[#6425E8] bg-[#6425E8]/10 ring-2 ring-[#6425E8]/30 shadow-xs'
-                        : 'border-[#E9E8F0] hover:bg-[#F8F8FC]'
-                    }`}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
+                    Category
+                  </label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
                   >
-                    <div className="flex items-center space-x-1.5 mb-1">
-                      <span className="w-3.5 h-3.5 rounded-full border border-gray-300 shrink-0 shadow-2xs" style={{ backgroundColor: c.hex }} />
-                      <span className="text-[11px] font-bold text-[#111126] truncate">{c.label}</span>
-                    </div>
-                    <span className="text-[10px] text-[#73738A] block truncate">{c.desc}</span>
-                  </button>
-                ))}
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
+                    Format
+                  </label>
+                  <select
+                    value={format}
+                    onChange={(e: any) => setFormat(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
+                  >
+                    <option value="physical">In-Person (Physical Venue)</option>
+                    <option value="online">Online (Virtual Stream / Meeting)</option>
+                    <option value="hybrid">Hybrid (Physical & Virtual)</option>
+                  </select>
+                </div>
+              </div>
+
+              {(format === 'online' || format === 'hybrid') && (
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
+                    Online Meeting / Live Stream URL
+                  </label>
+                  <input
+                    type="url"
+                    value={onlineUrl}
+                    onChange={(e) => setOnlineUrl(e.target.value)}
+                    placeholder="https://zoom.us/j/... or https://youtube.com/live/..."
+                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs text-[#111126] focus:bg-white focus:outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Section 2: Date, Time & Location */}
+            <div className="space-y-4">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-[#111126] pb-2 border-b border-[#F0F0F5]">
+                2. Date, Time & Location
+              </h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
+                    Event Date
+                  </label>
+                  <input
+                    type="text"
+                    value={eventDate}
+                    onChange={(e) => setEventDate(e.target.value)}
+                    placeholder="e.g. November 15, 2026"
+                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
+                    Start Time
+                  </label>
+                  <input
+                    type="text"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    placeholder="e.g. 5:00 PM"
+                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
+                    Timezone
+                  </label>
+                  <input
+                    type="text"
+                    value={timezone}
+                    onChange={(e) => setTimezone(e.target.value)}
+                    placeholder="e.g. WAT (UTC+1)"
+                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {format !== 'online' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
+                      Venue Name
+                    </label>
+                    <input
+                      type="text"
+                      value={venue}
+                      onChange={(e) => setVenue(e.target.value)}
+                      placeholder="e.g. Landmark Centre or Church Auditorium"
+                      className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
+                      Address
+                    </label>
+                    <input
+                      type="text"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      placeholder="Street address..."
+                      className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs text-[#111126] focus:bg-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="e.g. Lagos, Uyo, London"
+                      className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
+                      Country
+                    </label>
+                    <input
+                      type="text"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      placeholder="e.g. Nigeria, United Kingdom"
+                      className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Section 3: Visibility & Capacity */}
+            <div className="space-y-4">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-[#111126] pb-2 border-b border-[#F0F0F5]">
+                3. Visibility & Capacity
+              </h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
+                    Visibility State (Section 3.2)
+                  </label>
+                  <select
+                    value={visibility}
+                    onChange={(e: any) => setEditVisibility(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
+                  >
+                    <option value="public">Public (Appears on Eventra Discover)</option>
+                    <option value="unlisted">Unlisted (Accessible by link only)</option>
+                    <option value="private">Private (Restricted to invited attendees)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
+                    Attendee Capacity
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={capacity}
+                    onChange={(e) => setCapacity(parseInt(e.target.value, 10) || 500)}
+                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="interactive-btn w-full py-3 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-semibold rounded-xl transition shadow-sm flex items-center justify-center space-x-2 animate-pulse-glow"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Loading Editor...</span>
-                </>
-              ) : (
-                <>
-                  <ArrowRight className="w-4 h-4" />
-                  <span>Continue to Eventra Create Positioning</span>
-                </>
-              )}
-            </button>
-          </form>
+            {/* Section 4: Flyer / Artwork Upload */}
+            <div className="space-y-4">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-[#111126] pb-2 border-b border-[#F0F0F5]">
+                4. Flyer & Cover Image
+              </h2>
 
-          {/* Quick Start Presets */}
-          <div className="mt-8 pt-8 border-t border-[#E9E8F0]">
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-3">
-              Or Start Instantly with a Pro Event Template
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <button
-                type="button"
-                onClick={() => handleCreateWithPreset('tech', 'AI Developer Forum 2026')}
-                className="interactive-card p-3.5 bg-[#F8F8FC] hover:bg-white border border-[#E9E8F0] hover:border-[#6425E8] rounded-xl text-left transition flex flex-col justify-between group"
-              >
-                <div>
-                  <span className="text-xs font-bold text-[#111126] block">Tech Summit</span>
-                  <span className="text-[11px] text-[#73738A] mt-0.5 block">Modern indigo gradient</span>
-                </div>
-                <span className="text-[10px] font-bold text-[#6425E8] mt-3 group-hover:translate-x-0.5 transition-transform">
-                  Select Template →
-                </span>
-              </button>
+              <div className="border-2 border-dashed border-[#E9E8F0] hover:border-[#6425E8] rounded-2xl p-6 text-center cursor-pointer bg-[#F8F8FC] transition relative">
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg, image/webp"
+                  onChange={handleFileChange}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+                {filePreview ? (
+                  <div className="space-y-2">
+                    <img
+                      src={filePreview}
+                      alt="Flyer Preview"
+                      className="max-h-48 rounded-xl mx-auto object-contain border border-[#E9E8F0] shadow-sm"
+                    />
+                    <p className="text-xs font-bold text-[#6425E8]">Click to choose a different flyer image</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="w-12 h-12 rounded-2xl bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center mx-auto">
+                      <Upload className="w-6 h-6" />
+                    </div>
+                    <p className="text-xs font-bold text-[#111126]">Upload High-Resolution Event Artwork</p>
+                    <p className="text-[11px] text-[#73738A]">PNG, JPG, or WebP. If left blank, a branded template is generated.</p>
+                  </div>
+                )}
+              </div>
+            </div>
 
+            {/* Submit Action */}
+            <div className="pt-4 border-t border-[#F0F0F5] flex justify-end">
               <button
-                type="button"
-                onClick={() => handleCreateWithPreset('gala', 'Worship & Faith Night')}
-                className="interactive-card p-3.5 bg-[#F8F8FC] hover:bg-white border border-[#E9E8F0] hover:border-[#6425E8] rounded-xl text-left transition flex flex-col justify-between group"
+                type="submit"
+                disabled={loading}
+                className="px-8 py-3.5 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm transition flex items-center gap-2"
               >
-                <div>
-                  <span className="text-xs font-bold text-[#111126] block">Gala Evening</span>
-                  <span className="text-[11px] text-[#73738A] mt-0.5 block">Gold & royal purple</span>
-                </div>
-                <span className="text-[10px] font-bold text-[#6425E8] mt-3 group-hover:translate-x-0.5 transition-transform">
-                  Select Template →
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleCreateWithPreset('music', 'Pulse Music Festival')}
-                className="interactive-card p-3.5 bg-[#F8F8FC] hover:bg-white border border-[#E9E8F0] hover:border-[#6425E8] rounded-xl text-left transition flex flex-col justify-between group"
-              >
-                <div>
-                  <span className="text-xs font-bold text-[#111126] block">Creative Fest</span>
-                  <span className="text-[11px] text-[#73738A] mt-0.5 block">Emerald & charcoal</span>
-                </div>
-                <span className="text-[10px] font-bold text-[#6425E8] mt-3 group-hover:translate-x-0.5 transition-transform">
-                  Select Template →
-                </span>
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Publishing Event...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Create & Launch Event Workspace</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </div>
-          </div>
+          </form>
         </div>
-      </div>
+      </main>
     </div>
   );
 };

@@ -55,6 +55,10 @@ export const Dashboard: React.FC = () => {
   const [orgName, setOrgName] = useState(currentOrg?.name || 'My Events Workspace');
   const [orgSavedNotice, setOrgSavedNotice] = useState(false);
 
+  const [discoverRecommendations, setDiscoverRecommendations] = useState<FlyerEvent[]>([]);
+  const [totalRegistrationsCount, setTotalRegistrationsCount] = useState(0);
+  const [pendingRsvpsCount, setPendingRsvpsCount] = useState(0);
+
   useEffect(() => {
     // Record workspace visit telemetry
     db.recordVisit('/dashboard');
@@ -77,6 +81,8 @@ export const Dashboard: React.FC = () => {
       return ev.user_id === user.id || (currentOrg && ev.org_id === currentOrg.id);
     });
 
+    const userEventIds = new Set(userEvents.map((e) => e.id));
+
     const allParticipants = db.getParticipants();
     const userParticipants = allParticipants.filter((p) =>
       userEvents.some((e) => e.id === p.event_id)
@@ -86,6 +92,21 @@ export const Dashboard: React.FC = () => {
     const userDownloads = allDownloads.filter((d) =>
       userEvents.some((e) => e.id === d.event_id)
     );
+
+    // Registrations & RSVPs for this organizer
+    const allRegs = db.getRegistrations();
+    const userRegs = allRegs.filter((r) => userEventIds.has(r.event_id));
+    setTotalRegistrationsCount(userRegs.length);
+
+    const allInvs = db.getInvitations();
+    const userInvs = allInvs.filter((i) => userEventIds.has(i.event_id));
+    const pendingInvs = userInvs.filter((i) => i.rsvp_response === 'pending' || !i.rsvp_response);
+    setPendingRsvpsCount(pendingInvs.length);
+
+    // Discover recommendations: public published events by other organisers
+    const publicEvents = db.getPublicEvents();
+    const recs = publicEvents.filter((e) => !userEventIds.has(e.id));
+    setDiscoverRecommendations(recs);
 
     const members = db.getOrgMembers(currentOrg?.id);
 
@@ -767,16 +788,24 @@ export const Dashboard: React.FC = () => {
                         {/* Actions */}
                         <div className="mt-4 pt-3 border-t border-[#E9E8F0] flex items-center space-x-2">
                           <button
+                            onClick={() => navigate(`/events/manage/${ev.id}`)}
+                            className="flex-1 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl transition flex items-center justify-center space-x-1.5 shadow-2xs"
+                          >
+                            <Settings className="w-3.5 h-3.5" />
+                            <span>Manage</span>
+                          </button>
+
+                          <button
                             onClick={() => navigate(`/editor/${ev.id}`)}
-                            className="flex-1 py-2 bg-[#F8F8FC] hover:bg-[#EEF0F6] text-[#111126] text-sm font-semibold rounded-xl border border-[#E9E8F0] transition flex items-center justify-center space-x-1.5"
+                            title="Edit Flyer Frames"
+                            className="p-2 bg-[#F8F8FC] hover:bg-[#EEF0F6] border border-[#E9E8F0] text-[#111126] rounded-xl transition"
                           >
                             <Edit3 className="w-3.5 h-3.5 text-[#6425E8]" />
-                            <span>Edit Frames</span>
                           </button>
 
                           <button
                             onClick={() => handleCopyLink(ev.slug, ev.id)}
-                            title="Copy participant link"
+                            title="Copy participant flyer link"
                             className="p-2 bg-white hover:bg-[#F8F8FC] border border-[#E9E8F0] text-[#73738A] hover:text-[#111126] rounded-xl transition"
                           >
                             {copiedId === ev.id ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
@@ -786,7 +815,7 @@ export const Dashboard: React.FC = () => {
                             href={`/e/${ev.slug}`}
                             target="_blank"
                             rel="noreferrer"
-                            title="Open participant link"
+                            title="Open participant flyer page"
                             className="p-2 bg-white hover:bg-[#F8F8FC] border border-[#E9E8F0] text-[#73738A] hover:text-[#6425E8] rounded-xl transition"
                           >
                             <ExternalLink className="w-4 h-4" />
@@ -859,6 +888,74 @@ export const Dashboard: React.FC = () => {
                       </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 10: EVENTS YOU MIGHT LIKE (EVENTRA DISCOVER) */}
+            <div className="bg-white border border-[#E9E8F0] rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-base font-bold text-[#111126] flex items-center gap-2">
+                    <Compass className="w-4 h-4 text-[#6425E8]" />
+                    <span>Events You Might Like</span>
+                  </h3>
+                  <p className="text-xs text-[#525266] mt-0.5">
+                    Discover events, connect with communities and find your next experience.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/discover')}
+                  className="text-xs font-bold text-[#6425E8] hover:underline flex items-center gap-1 self-start sm:self-auto"
+                >
+                  <span>Explore All on Discover</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {discoverRecommendations.length === 0 ? (
+                <div className="py-6 text-center text-xs text-[#73738A]">
+                  No external public events to recommend right now.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                  {discoverRecommendations.slice(0, 3).map((rec) => (
+                    <div
+                      key={rec.id}
+                      onClick={() => navigate(`/events/${rec.slug || rec.id}`)}
+                      className="border border-[#E9E8F0] rounded-xl p-3.5 hover:border-[#6425E8]/40 hover:shadow-xs transition cursor-pointer flex flex-col justify-between group bg-[#F8F8FC]/50 hover:bg-white"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-16 h-16 rounded-lg bg-slate-200 overflow-hidden shrink-0">
+                          <img
+                            src={rec.cover_image_url || rec.original_flyer_path || '/assets/aistudio/IMG_2529_74b7441a.jpeg'}
+                            alt={rec.title || rec.event_name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition"
+                          />
+                        </div>
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <span className="text-[10px] font-bold text-[#6425E8] uppercase tracking-wider block truncate">
+                            {rec.category || 'Event'}
+                          </span>
+                          <h4 className="text-xs font-bold text-[#111126] line-clamp-1 group-hover:text-[#6425E8] transition">
+                            {rec.title || rec.event_name}
+                          </h4>
+                          <p className="text-[11px] text-[#73738A] truncate">
+                            {rec.event_date || 'Date TBA'} · {rec.city || 'Online'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 pt-2.5 border-t border-[#E9E8F0] flex items-center justify-between text-[11px]">
+                        <span className="text-[#73738A] truncate max-w-[130px]">{rec.organiser_name || 'Organiser'}</span>
+                        <span className="text-[#6425E8] font-bold flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
+                          <span>View Event</span>
+                          <ChevronRight className="w-3 h-3" />
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

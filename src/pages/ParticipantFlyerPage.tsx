@@ -557,9 +557,9 @@ export const ParticipantFlyerPage: React.FC = () => {
   const resolvedTextColor = template?.text_color || '#111126';
 
   return (
-    <div className="min-h-screen bg-[#F8F8FC] py-0 sm:py-8 px-0 sm:px-4 flex flex-col items-center justify-start sm:justify-center font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8] overflow-x-hidden w-full">
+    <div className="min-h-screen bg-[#F8F8FC] pt-3.5 pb-8 sm:py-8 px-0 sm:px-4 flex flex-col items-center justify-start sm:justify-center font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8] overflow-x-hidden w-full">
       {/* Brand Header */}
-      <div className="py-2.5 px-4 sm:mb-6 sm:p-0 flex flex-col items-center shrink-0">
+      <div className="py-2 px-4 sm:mb-6 sm:p-0 flex flex-col items-center shrink-0">
         <EventraLogo variant="with-tagline" size="md" />
       </div>
 
@@ -904,26 +904,26 @@ export const ParticipantFlyerPage: React.FC = () => {
             </div>
           </form>
         ) : (
-          /* Result Screen */
-          <div className="p-3 sm:p-6 space-y-4 sm:space-y-5 animate-scale-up">
-            <div className="text-center">
+          /* Result Screen: Full width edge-to-edge flyer preview on mobile with zero border space */
+          <div className="py-3 px-0 sm:p-6 space-y-4 sm:space-y-5 animate-scale-up w-full">
+            <div className="text-center px-4 sm:px-0">
               <div className="inline-flex items-center space-x-1.5 text-emerald-700 text-xs font-bold mb-3 bg-emerald-50 px-3.5 py-1.5 rounded-full border border-emerald-200">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 <span>Your Personalised Flyer is Ready!</span>
               </div>
+            </div>
 
-              {/* Generated Flyer Preview: Full width on mobile without side borders */}
-              <div className="w-full sm:max-w-md mx-auto overflow-hidden sm:rounded-xl shadow-md sm:shadow-xl border-0 sm:border border-[#E9E8F0] bg-black/5 relative group">
-                <img
-                  src={resultImageUrl}
-                  alt="Personalised Flyer"
-                  className="w-full h-auto block"
-                />
-              </div>
+            {/* Generated Flyer Preview: 100% full width on mobile screen with ZERO border gaps */}
+            <div className="w-full sm:max-w-md mx-auto overflow-hidden sm:rounded-xl shadow-md sm:shadow-xl border-0 sm:border border-[#E9E8F0] bg-black/5 relative group p-0">
+              <img
+                src={resultImageUrl}
+                alt="Personalised Flyer"
+                className="w-full h-auto block"
+              />
             </div>
 
             {/* Download Options */}
-            <div className="px-1 sm:px-0">
+            <div className="px-4 sm:px-0">
               <span className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] text-center mb-2.5">
                 Download Format
               </span>

@@ -1,7 +1,9 @@
 import { 
   Profile, FlyerEvent, FlyerTemplate, Participant, FlyerDownload, 
   Organisation, OrganisationMember, SiteVisit, VisitorStats,
-  AttendeeCrmRecord, UserCrmRecord, PlatformOverviewMetrics, DailyVisitorTrend 
+  AttendeeCrmRecord, UserCrmRecord, PlatformOverviewMetrics, DailyVisitorTrend,
+  EventRegistration, RegistrationFormConfig, EventInvitation, SavedEvent,
+  UserInterest, EventPageAnalytic 
 } from '../types/database';
 import { createSampleFlyerDataUrl } from './sample-flyers';
 
@@ -95,6 +97,14 @@ const LS_AUTH_SESSION = 'eventra_auth_session';
 const LS_ACCOUNTS_KEY = 'eventra_registered_accounts';
 const LS_VISITS_KEY = 'eventra_site_visits_log';
 const LS_VISITOR_ID_KEY = 'eventra_anonymous_visitor_id';
+
+// Stage 1 Storage Keys
+const LS_REGISTRATIONS_KEY = 'eventra_registrations_list';
+const LS_INVITATIONS_KEY = 'eventra_invitations_list';
+const LS_FORM_CONFIGS_KEY = 'eventra_form_configs_list';
+const LS_SAVED_EVENTS_KEY = 'eventra_saved_events_list';
+const LS_USER_INTERESTS_KEY = 'eventra_user_interests_list';
+const LS_EVENT_ANALYTICS_KEY = 'eventra_event_analytics_list';
 
 export interface StoredAccount {
   id: string;
@@ -397,22 +407,181 @@ export async function initializeLocalData(): Promise<void> {
       user_id: 'usr_organizer_main',
       org_id: 'org_main',
       event_name: 'Worship Expression 4.0',
+      title: 'Worship Expression 4.0',
       slug: 'worship-expression-40',
+      description: 'An evening of profound praise, live orchestra, and deep spiritual communion themed "When Our Hearts Speak". Join ministers, delegates, and families from across the region for an unforgettable night of uplifting music and renewal.',
       original_flyer_path: '/assets/aistudio/IMG_2529_74b7441a.jpeg',
       original_flyer_data_url: '',
-      category: 'Gala & Worship',
-      venue: '177 Aka Road, Opp. IBB IL, Uyo, Akwa Ibom State',
-      event_date: '15th Nov 2026 · 5:00 PM Prompt',
+      cover_image_url: '/assets/aistudio/IMG_2529_74b7441a.jpeg',
+      category: 'Religion and Faith',
+      venue: 'Pilgrims House of the Word Auditorium',
+      address: '177 Aka Road, Opp. IBB IL',
+      city: 'Uyo',
+      country: 'Nigeria',
+      event_type: 'physical',
+      event_date: 'November 15, 2026',
+      start_time: '5:00 PM',
+      end_time: '9:30 PM',
+      timezone: 'WAT (UTC+1)',
       status: 'published',
+      visibility: 'public',
+      registration_status: 'open',
+      capacity: 500,
+      is_featured: true,
+      organiser_name: 'Pilgrims Pentecostal Ministries',
+      organiser_email: 'events@pilgrimsministries.org',
+      organiser_contact: '+234 803 123 4567',
+      event_website: 'https://pilgrimsministries.org',
+      schedule: [
+        { time: '4:30 PM', title: 'Red Carpet & Guest Welcoming', description: 'Photo reception and official attendee flyer check-in.' },
+        { time: '5:00 PM', title: 'Opening Procession & Choral Introit', description: 'Mass choir and live symphony ensemble opening.' },
+        { time: '6:15 PM', title: 'Keynote Exhortation & Ministrations', description: 'Special guest ministrations with live orchestra.' },
+        { time: '8:30 PM', title: 'Free Medical Outreach & Community Blessing', description: 'On-site medical consultations and welfare presentation.' },
+      ],
+      faqs: [
+        { question: 'Is attendance completely free?', answer: 'Yes! Admission is free, but registration or RSVP is strongly encouraged for reserved auditorium seating.' },
+        { question: 'Can I get a personalized attendance flyer?', answer: 'Yes, click the "Personalised Flyer" link on this page to create your official branded attendee flyer in seconds.' },
+        { question: 'Is parking available?', answer: 'Secure on-site parking is available at the venue with traffic wardens on duty.' },
+      ],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     eventsList.unshift(liveEvent);
+
+    // Additional Stage 1 Discovery Marketplace events
+    const techEvent: FlyerEvent = {
+      id: 'ev_tech_summit_2026',
+      user_id: 'usr_organizer_main',
+      org_id: 'org_main',
+      event_name: 'Next Horizon AI & Cloud Summit 2026',
+      title: 'Next Horizon AI & Cloud Summit 2026',
+      slug: 'next-horizon-2026',
+      description: 'The premier gathering for software architects, AI researchers, and cloud leaders exploring next-generation generative models, distributed infrastructure, and production engineering.',
+      original_flyer_path: createSampleFlyerDataUrl('tech'),
+      cover_image_url: createSampleFlyerDataUrl('tech'),
+      category: 'Technology',
+      venue: 'Moscone Center, South Hall',
+      address: '747 Howard St',
+      city: 'San Francisco',
+      country: 'United States',
+      event_type: 'hybrid',
+      online_url: 'https://stream.nexthorizon2026.io',
+      event_date: 'November 14-16, 2026',
+      start_time: '9:00 AM',
+      end_time: '6:00 PM',
+      timezone: 'PST (UTC-8)',
+      status: 'published',
+      visibility: 'public',
+      registration_status: 'open',
+      capacity: 1200,
+      is_featured: true,
+      organiser_name: 'Horizon Tech Foundation',
+      organiser_email: 'summit@nexthorizon2026.io',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    eventsList.push(techEvent);
+
+    const lagosCreative: FlyerEvent = {
+      id: 'ev_lagos_creative_2026',
+      user_id: 'usr_organizer_main',
+      org_id: 'org_main',
+      event_name: 'Pulse Live African Creative & Design Expo',
+      title: 'Pulse Live African Creative & Design Expo',
+      slug: 'pulse-live-lagos',
+      description: 'Three stages of design masterclasses, film showcases, interactive media installations, and live music celebrating African creativity and digital innovation.',
+      original_flyer_path: createSampleFlyerDataUrl('music'),
+      cover_image_url: createSampleFlyerDataUrl('music'),
+      category: 'Music',
+      venue: 'Landmark Beach & Event Centre',
+      address: 'Water Corporation Drive, Victoria Island',
+      city: 'Lagos',
+      country: 'Nigeria',
+      event_type: 'physical',
+      event_date: 'December 5, 2026',
+      start_time: '12:00 PM',
+      end_time: '11:00 PM',
+      timezone: 'WAT (UTC+1)',
+      status: 'published',
+      visibility: 'public',
+      registration_status: 'open',
+      capacity: 800,
+      is_featured: true,
+      organiser_name: 'Pulse Media Group',
+      organiser_email: 'hello@pulselive.africa',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    eventsList.push(lagosCreative);
+
+    const londonSummit: FlyerEvent = {
+      id: 'ev_london_leadership_2026',
+      user_id: 'usr_organizer_main',
+      org_id: 'org_main',
+      event_name: 'Global Enterprise Leadership Forum',
+      title: 'Global Enterprise Leadership Forum',
+      slug: 'global-leadership-forum-london',
+      description: 'Executive summit bringing together founders, corporate directors, and scale-up operators to discuss governance, capital allocation, and sustainable growth in modern markets.',
+      original_flyer_path: createSampleFlyerDataUrl('tech'),
+      cover_image_url: createSampleFlyerDataUrl('tech'),
+      category: 'Business',
+      venue: 'ExCeL London International Centre',
+      address: 'Royal Victoria Dock, 1 Western Gateway',
+      city: 'London',
+      country: 'United Kingdom',
+      event_type: 'physical',
+      event_date: 'November 28, 2026',
+      start_time: '10:00 AM',
+      end_time: '5:00 PM',
+      timezone: 'GMT (UTC+0)',
+      status: 'published',
+      visibility: 'public',
+      registration_status: 'open',
+      capacity: 450,
+      is_featured: false,
+      organiser_name: 'Global Leadership Institute',
+      organiser_email: 'register@leadershipsummit.org.uk',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    eventsList.push(londonSummit);
+
+    const onlineWorkshop: FlyerEvent = {
+      id: 'ev_online_distributed_systems',
+      user_id: 'usr_organizer_main',
+      org_id: 'org_main',
+      event_name: 'Modern Distributed Systems Architecture Masterclass',
+      title: 'Modern Distributed Systems Architecture Masterclass',
+      slug: 'distributed-systems-masterclass',
+      description: 'Hands-on interactive masterclass covering high-throughput event sourcing, CQRS patterns, and resilient consensus mechanisms in modern production backends.',
+      original_flyer_path: createSampleFlyerDataUrl('tech'),
+      cover_image_url: createSampleFlyerDataUrl('tech'),
+      category: 'Workshops',
+      venue: 'Virtual Classroom (Zoom & Discord)',
+      city: 'Online',
+      country: 'Online',
+      event_type: 'online',
+      online_url: 'https://zoom.us/j/eventra-workshop',
+      event_date: 'November 20, 2026',
+      start_time: '2:00 PM',
+      end_time: '5:30 PM',
+      timezone: 'UTC',
+      status: 'published',
+      visibility: 'public',
+      registration_status: 'open',
+      capacity: 300,
+      is_featured: false,
+      organiser_name: 'Eventra Engineering Academy',
+      organiser_email: 'academy@eventra.io',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    eventsList.push(onlineWorkshop);
+
     safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(eventsList));
 
     const templatesRaw = safeLocalStorageGet(LS_TEMPLATES_KEY);
     const tmplList: FlyerTemplate[] = templatesRaw ? JSON.parse(templatesRaw) : [];
-    const existingTmplIdx = tmplList.findIndex((t) => t.event_id === evId);
     const exactTemplate: FlyerTemplate = {
       id: `tmpl_${evId}`,
       event_id: evId,
@@ -435,12 +604,83 @@ export async function initializeLocalData(): Promise<void> {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    if (existingTmplIdx >= 0) {
-      tmplList[existingTmplIdx] = exactTemplate;
-    } else {
-      tmplList.push(exactTemplate);
-    }
+    tmplList.push(exactTemplate);
     safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify(tmplList));
+
+    // Seed initial registrations for Worship Expression
+    const initialRegistrations: EventRegistration[] = [
+      {
+        id: 'reg_demo_01',
+        event_id: evId,
+        first_name: 'Marvelous',
+        last_name: 'Ndukwe',
+        email: 'marvelousndukwe1570@gmail.com',
+        phone: '+234 801 234 5678',
+        registration_reference: 'EVT-WRP01',
+        status: 'confirmed',
+        created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+        updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+      },
+      {
+        id: 'reg_demo_02',
+        event_id: evId,
+        first_name: 'John',
+        last_name: 'Amah',
+        email: 'john.amah@example.com',
+        phone: '+234 802 345 6789',
+        registration_reference: 'EVT-WRP02',
+        status: 'confirmed',
+        created_at: new Date(Date.now() - 86400000).toISOString(),
+        updated_at: new Date(Date.now() - 86400000).toISOString(),
+      },
+      {
+        id: 'reg_demo_03',
+        event_id: evId,
+        first_name: 'Sarah',
+        last_name: 'Jenkins',
+        email: 'sarah.j@example.com',
+        registration_reference: 'EVT-WRP03',
+        status: 'confirmed',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+    safeLocalStorageSet(LS_REGISTRATIONS_KEY, JSON.stringify(initialRegistrations));
+
+    // Seed initial digital invitations (Eventra Invite)
+    const initialInvitations: EventInvitation[] = [
+      {
+        id: 'inv_demo_01',
+        event_id: evId,
+        invited_name: 'Pastor Emmanuel Bassey',
+        invited_email: 'emmanuel.bassey@faithcommunity.org',
+        invitation_token: 'worship-vip-pastor-bassey',
+        message: 'Dear Pastor Bassey, we are deeply honored to invite you as our special guest to Worship Expression 4.0.',
+        status: 'accepted',
+        rsvp_response: 'accepted',
+        guest_count: 2,
+        rsvp_deadline: 'November 10, 2026',
+        created_by: 'usr_organizer_main',
+        created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+        updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+      },
+      {
+        id: 'inv_demo_02',
+        event_id: evId,
+        invited_name: 'Dr. Stella Okon',
+        invited_email: 'stella.okon@medoutreach.org',
+        invitation_token: 'worship-guest-stella-okon',
+        message: 'Dr. Okon, thank you for partnering with us for the Free Medical Outreach at Worship Expression 4.0.',
+        status: 'accepted',
+        rsvp_response: 'accepted',
+        guest_count: 1,
+        rsvp_deadline: 'November 10, 2026',
+        created_by: 'usr_organizer_main',
+        created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+        updated_at: new Date(Date.now() - 86400000).toISOString(),
+      },
+    ];
+    safeLocalStorageSet(LS_INVITATIONS_KEY, JSON.stringify(initialInvitations));
   } else {
     // Sanitize existing template to ensure circle Y and name coordinates are exact without frameScale
     const templatesRaw = safeLocalStorageGet(LS_TEMPLATES_KEY);
@@ -466,14 +706,24 @@ export async function initializeLocalData(): Promise<void> {
     }
   }
 
-  if (!safeLocalStorageGet(LS_PARTICIPANTS_KEY)) {
-    safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify([]));
+  // Ensure collections exist
+  if (!safeLocalStorageGet(LS_REGISTRATIONS_KEY)) {
+    safeLocalStorageSet(LS_REGISTRATIONS_KEY, JSON.stringify([]));
   }
-  if (!safeLocalStorageGet(LS_DOWNLOADS_KEY)) {
-    safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify([]));
+  if (!safeLocalStorageGet(LS_INVITATIONS_KEY)) {
+    safeLocalStorageSet(LS_INVITATIONS_KEY, JSON.stringify([]));
   }
-  if (!safeLocalStorageGet(LS_VISITS_KEY)) {
-    safeLocalStorageSet(LS_VISITS_KEY, JSON.stringify([]));
+  if (!safeLocalStorageGet(LS_FORM_CONFIGS_KEY)) {
+    safeLocalStorageSet(LS_FORM_CONFIGS_KEY, JSON.stringify([]));
+  }
+  if (!safeLocalStorageGet(LS_SAVED_EVENTS_KEY)) {
+    safeLocalStorageSet(LS_SAVED_EVENTS_KEY, JSON.stringify([]));
+  }
+  if (!safeLocalStorageGet(LS_USER_INTERESTS_KEY)) {
+    safeLocalStorageSet(LS_USER_INTERESTS_KEY, JSON.stringify([]));
+  }
+  if (!safeLocalStorageGet(LS_EVENT_ANALYTICS_KEY)) {
+    safeLocalStorageSet(LS_EVENT_ANALYTICS_KEY, JSON.stringify([]));
   }
 }
 
@@ -975,6 +1225,340 @@ export const db = {
     return { removedEvents, removedParticipants: removedParts };
   },
 
+  // ----------------------------------------------------
+  // STAGE 1: EVENTRA MANAGE, DISCOVER, REGISTER, INVITE
+  // ----------------------------------------------------
+  getPublicEvents(): FlyerEvent[] {
+    const events = this.getEvents();
+    return events.filter((e) => e.status === 'published' && (e.visibility === 'public' || !e.visibility));
+  },
+
+  getDiscoverEvents(options?: {
+    search?: string;
+    category?: string;
+    city?: string;
+    country?: string;
+    eventType?: string;
+    timeframe?: string;
+  }): FlyerEvent[] {
+    let events = this.getPublicEvents();
+
+    if (options?.search) {
+      const q = options.search.toLowerCase().trim();
+      events = events.filter((e) =>
+        (e.title || e.event_name || '').toLowerCase().includes(q) ||
+        (e.description || '').toLowerCase().includes(q) ||
+        (e.city || '').toLowerCase().includes(q) ||
+        (e.country || '').toLowerCase().includes(q) ||
+        (e.venue || '').toLowerCase().includes(q) ||
+        (e.category || '').toLowerCase().includes(q) ||
+        (e.organiser_name || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (options?.category && options.category !== 'All') {
+      events = events.filter((e) => (e.category || '').toLowerCase() === options.category!.toLowerCase());
+    }
+
+    if (options?.city && options.city !== 'All Cities') {
+      events = events.filter((e) => (e.city || '').toLowerCase() === options.city!.toLowerCase());
+    }
+
+    if (options?.country && options.country !== 'All Countries') {
+      events = events.filter((e) => (e.country || '').toLowerCase() === options.country!.toLowerCase());
+    }
+
+    if (options?.eventType && options.eventType !== 'all') {
+      events = events.filter((e) => e.event_type === options.eventType);
+    }
+
+    return events;
+  },
+
+  // REGISTRATIONS (EVENTRA REGISTER)
+  getRegistrations(eventId?: string): EventRegistration[] {
+    const raw = safeLocalStorageGet(LS_REGISTRATIONS_KEY);
+    if (!raw) return [];
+    try {
+      const all: EventRegistration[] = JSON.parse(raw);
+      if (eventId) {
+        return all.filter((r) => r.event_id === eventId);
+      }
+      return all;
+    } catch {
+      return [];
+    }
+  },
+
+  getRegistrationsByEmail(email: string): EventRegistration[] {
+    const raw = safeLocalStorageGet(LS_REGISTRATIONS_KEY);
+    if (!raw || !email) return [];
+    try {
+      const all: EventRegistration[] = JSON.parse(raw);
+      return all.filter((r) => r.email.toLowerCase() === email.toLowerCase());
+    } catch {
+      return [];
+    }
+  },
+
+  getRegistrationById(id: string): EventRegistration | null {
+    const all = this.getRegistrations();
+    return all.find((r) => r.id === id) || null;
+  },
+
+  saveRegistration(data: Omit<EventRegistration, 'id' | 'registration_reference' | 'created_at' | 'updated_at'> & { id?: string; registration_reference?: string }): EventRegistration {
+    const all = this.getRegistrations();
+    const event = this.getEventById(data.event_id);
+
+    // Capacity enforcement
+    if (event && event.capacity && event.capacity > 0) {
+      const existingConfirmed = all.filter((r) => r.event_id === data.event_id && r.status === 'confirmed').length;
+      if (existingConfirmed >= event.capacity) {
+        throw new Error('This event has reached maximum attendee capacity.');
+      }
+    }
+
+    const newId = data.id || `reg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const prefix = event?.slug ? event.slug.substring(0, 3).toUpperCase() : 'EVT';
+    const reference = data.registration_reference || `${prefix}-${randomSuffix}`;
+
+    const record: EventRegistration = {
+      id: newId,
+      event_id: data.event_id,
+      attendee_user_id: data.attendee_user_id,
+      first_name: data.first_name,
+      last_name: data.last_name,
+      email: data.email,
+      phone: data.phone,
+      registration_reference: reference,
+      status: data.status || 'confirmed',
+      custom_answers: data.custom_answers || {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const existingIndex = all.findIndex((r) => r.id === newId);
+    if (existingIndex >= 0) {
+      all[existingIndex] = { ...all[existingIndex], ...record, updated_at: new Date().toISOString() };
+    } else {
+      all.unshift(record);
+    }
+
+    safeLocalStorageSet(LS_REGISTRATIONS_KEY, JSON.stringify(all));
+    this.recordEventAction(data.event_id, 'register_submit', { reference });
+    return record;
+  },
+
+  updateRegistrationStatus(id: string, status: EventRegistration['status']): boolean {
+    const all = this.getRegistrations();
+    const idx = all.findIndex((r) => r.id === id);
+    if (idx === -1) return false;
+    all[idx].status = status;
+    all[idx].updated_at = new Date().toISOString();
+    safeLocalStorageSet(LS_REGISTRATIONS_KEY, JSON.stringify(all));
+    return true;
+  },
+
+  // REGISTRATION FORM CONFIG
+  getRegistrationFormConfig(eventId: string): RegistrationFormConfig | null {
+    const raw = safeLocalStorageGet(LS_FORM_CONFIGS_KEY);
+    if (!raw) return null;
+    try {
+      const all: RegistrationFormConfig[] = JSON.parse(raw);
+      return all.find((c) => c.event_id === eventId) || null;
+    } catch {
+      return null;
+    }
+  },
+
+  saveRegistrationFormConfig(config: RegistrationFormConfig): RegistrationFormConfig {
+    const raw = safeLocalStorageGet(LS_FORM_CONFIGS_KEY);
+    const all: RegistrationFormConfig[] = raw ? JSON.parse(raw) : [];
+    const idx = all.findIndex((c) => c.event_id === config.event_id);
+    const updated = { ...config, updated_at: new Date().toISOString() };
+    if (idx >= 0) {
+      all[idx] = updated;
+    } else {
+      all.push(updated);
+    }
+    safeLocalStorageSet(LS_FORM_CONFIGS_KEY, JSON.stringify(all));
+    return updated;
+  },
+
+  // INVITATIONS (EVENTRA INVITE)
+  getInvitations(eventId?: string): EventInvitation[] {
+    const raw = safeLocalStorageGet(LS_INVITATIONS_KEY);
+    if (!raw) return [];
+    try {
+      const all: EventInvitation[] = JSON.parse(raw);
+      if (eventId) {
+        return all.filter((i) => i.event_id === eventId);
+      }
+      return all;
+    } catch {
+      return [];
+    }
+  },
+
+  getInvitationByToken(token: string): EventInvitation | null {
+    const all = this.getInvitations();
+    return all.find((i) => i.invitation_token === token) || null;
+  },
+
+  saveInvitation(data: Omit<EventInvitation, 'id' | 'created_at' | 'updated_at'> & { id?: string }): EventInvitation {
+    const all = this.getInvitations();
+    const token = data.invitation_token || `inv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const newId = data.id || `inv_rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const record: EventInvitation = {
+      id: newId,
+      event_id: data.event_id,
+      invited_name: data.invited_name,
+      invited_email: data.invited_email,
+      invited_phone: data.invited_phone,
+      invitation_token: token,
+      message: data.message,
+      status: data.status || 'sent',
+      rsvp_response: data.rsvp_response || 'pending',
+      guest_count: data.guest_count || 1,
+      dietary_preferences: data.dietary_preferences,
+      rsvp_deadline: data.rsvp_deadline,
+      created_by: data.created_by,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const existingIndex = all.findIndex((i) => i.id === newId || i.invitation_token === token);
+    if (existingIndex >= 0) {
+      all[existingIndex] = { ...all[existingIndex], ...record, updated_at: new Date().toISOString() };
+    } else {
+      all.unshift(record);
+    }
+    safeLocalStorageSet(LS_INVITATIONS_KEY, JSON.stringify(all));
+    return record;
+  },
+
+  updateInvitationRSVP(
+    token: string,
+    rsvp: 'accepted' | 'declined' | 'maybe',
+    guestCount?: number,
+    dietaryPreferences?: string
+  ): boolean {
+    const all = this.getInvitations();
+    const idx = all.findIndex((i) => i.invitation_token === token);
+    if (idx === -1) return false;
+    all[idx].rsvp_response = rsvp;
+    all[idx].status = rsvp === 'accepted' ? 'accepted' : rsvp === 'declined' ? 'declined' : 'maybe';
+    if (guestCount !== undefined) all[idx].guest_count = guestCount;
+    if (dietaryPreferences !== undefined) all[idx].dietary_preferences = dietaryPreferences;
+    all[idx].updated_at = new Date().toISOString();
+    safeLocalStorageSet(LS_INVITATIONS_KEY, JSON.stringify(all));
+
+    this.recordEventAction(all[idx].event_id, rsvp === 'accepted' ? 'rsvp_accept' : 'rsvp_decline', { token });
+    return true;
+  },
+
+  // SAVED EVENTS (ATTENDEE PORTAL)
+  getSavedEvents(userId: string): SavedEvent[] {
+    const raw = safeLocalStorageGet(LS_SAVED_EVENTS_KEY);
+    if (!raw) return [];
+    try {
+      const all: SavedEvent[] = JSON.parse(raw);
+      return all.filter((s) => s.user_id === userId);
+    } catch {
+      return [];
+    }
+  },
+
+  isEventSaved(userId: string, eventId: string): boolean {
+    if (!userId || !eventId) return false;
+    const all = this.getSavedEvents(userId);
+    return all.some((s) => s.event_id === eventId);
+  },
+
+  toggleSaveEvent(userId: string, eventId: string): boolean {
+    if (!userId || !eventId) return false;
+    const raw = safeLocalStorageGet(LS_SAVED_EVENTS_KEY);
+    let all: SavedEvent[] = raw ? JSON.parse(raw) : [];
+    const idx = all.findIndex((s) => s.user_id === userId && s.event_id === eventId);
+    let isSaved = false;
+    if (idx >= 0) {
+      all.splice(idx, 1);
+      isSaved = false;
+    } else {
+      all.push({
+        id: `save_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        user_id: userId,
+        event_id: eventId,
+        created_at: new Date().toISOString(),
+      });
+      isSaved = true;
+      this.recordEventAction(eventId, 'event_save');
+    }
+    safeLocalStorageSet(LS_SAVED_EVENTS_KEY, JSON.stringify(all));
+    return isSaved;
+  },
+
+  // USER INTERESTS
+  getUserInterests(userId: string): string[] {
+    const raw = safeLocalStorageGet(LS_USER_INTERESTS_KEY);
+    if (!raw) return [];
+    try {
+      const all: UserInterest[] = JSON.parse(raw);
+      return all.filter((ui) => ui.user_id === userId).map((ui) => ui.category);
+    } catch {
+      return [];
+    }
+  },
+
+  saveUserInterests(userId: string, categories: string[]): void {
+    const raw = safeLocalStorageGet(LS_USER_INTERESTS_KEY);
+    let all: UserInterest[] = raw ? JSON.parse(raw) : [];
+    all = all.filter((ui) => ui.user_id !== userId);
+    categories.forEach((cat) => {
+      all.push({
+        id: `ui_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        user_id: userId,
+        category: cat,
+        created_at: new Date().toISOString(),
+      });
+    });
+    safeLocalStorageSet(LS_USER_INTERESTS_KEY, JSON.stringify(all));
+  },
+
+  // EVENT PAGE ANALYTICS
+  recordEventAction(eventId: string, action_type: EventPageAnalytic['action_type'], metadata?: Record<string, any>): void {
+    try {
+      const raw = safeLocalStorageGet(LS_EVENT_ANALYTICS_KEY);
+      const all: EventPageAnalytic[] = raw ? JSON.parse(raw) : [];
+      const visitorId = getOrCreateVisitorId();
+      all.push({
+        id: `epa_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        event_id: eventId,
+        visitor_id: visitorId,
+        action_type,
+        metadata,
+        timestamp: new Date().toISOString(),
+      });
+      const trimmed = all.slice(-1000);
+      safeLocalStorageSet(LS_EVENT_ANALYTICS_KEY, JSON.stringify(trimmed));
+    } catch {}
+  },
+
+  getEventAnalytics(eventId: string): { views: number; registerClicks: number; rsvpResponses: number } {
+    try {
+      const raw = safeLocalStorageGet(LS_EVENT_ANALYTICS_KEY);
+      if (!raw) return { views: 0, registerClicks: 0, rsvpResponses: 0 };
+      const all: EventPageAnalytic[] = JSON.parse(raw);
+      const evItems = all.filter((a) => a.event_id === eventId);
+      const views = evItems.filter((a) => a.action_type === 'view').length;
+      const registerClicks = evItems.filter((a) => a.action_type === 'register_click' || a.action_type === 'register_submit').length;
+      const rsvpResponses = evItems.filter((a) => a.action_type === 'rsvp_accept' || a.action_type === 'rsvp_decline').length;
+      return { views, registerClicks, rsvpResponses };
+    } catch {
+      return { views: 0, registerClicks: 0, rsvpResponses: 0 };
+    }
+  },
+
   clearWorkspaceEvents(): void {
     safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify([]));
     safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify([]));
@@ -1001,3 +1585,39 @@ export function exportAttendeesToCSV(attendees: AttendeeCrmRecord[]): string {
   ]);
   return [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
 }
+
+/**
+ * Utility to export Event Registrations (Eventra Register) to CSV
+ */
+export function exportEventRegistrationsToCSV(registrations: EventRegistration[]): string {
+  const headers = ['Reference', 'First Name', 'Last Name', 'Email', 'Phone', 'Status', 'Registered Date'];
+  const rows = registrations.map((r) => [
+    `"${r.registration_reference}"`,
+    `"${(r.first_name || '').replace(/"/g, '""')}"`,
+    `"${(r.last_name || '').replace(/"/g, '""')}"`,
+    `"${(r.email || '').replace(/"/g, '""')}"`,
+    `"${(r.phone || '').replace(/"/g, '""')}"`,
+    `"${r.status}"`,
+    `"${r.created_at}"`,
+  ]);
+  return [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+}
+
+/**
+ * Utility to export Event Invitations (Eventra Invite) to CSV
+ */
+export function exportEventInvitationsToCSV(invitations: EventInvitation[]): string {
+  const headers = ['Invited Name', 'Email', 'Phone', 'Token Link', 'RSVP Status', 'Guest Count', 'Dietary Notes', 'Created At'];
+  const rows = invitations.map((i) => [
+    `"${(i.invited_name || '').replace(/"/g, '""')}"`,
+    `"${(i.invited_email || '').replace(/"/g, '""')}"`,
+    `"${(i.invited_phone || '').replace(/"/g, '""')}"`,
+    `"/invite/${i.invitation_token}"`,
+    `"${i.rsvp_response}"`,
+    i.guest_count || 1,
+    `"${(i.dietary_preferences || '').replace(/"/g, '""')}"`,
+    `"${i.created_at}"`,
+  ]);
+  return [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+}
+

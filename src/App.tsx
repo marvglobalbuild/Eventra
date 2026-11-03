@@ -8,6 +8,11 @@ import { CreateEvent } from './pages/CreateEvent';
 import { TemplateEditor } from './pages/TemplateEditor';
 import { ParticipantFlyerPage } from './pages/ParticipantFlyerPage';
 import { AdminCRM } from './pages/AdminCRM';
+import { DiscoverEvents } from './pages/DiscoverEvents';
+import { PublicEventPage } from './pages/PublicEventPage';
+import { InvitationPage } from './pages/InvitationPage';
+import { ManageEvent } from './pages/ManageEvent';
+import { AttendeePortal } from './pages/AttendeePortal';
 
 const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -28,13 +33,20 @@ export default function App() {
         <Routes>
           {/* Public Visitor Pages */}
           <Route path="/" element={<LandingPage />} />
+          <Route path="/discover" element={<DiscoverEvents />} />
+          <Route path="/events/:slug" element={<PublicEventPage />} />
+          <Route path="/event/:slug" element={<PublicEventPage />} />
+          <Route path="/invite/:token" element={<InvitationPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/reset-password" element={<PasswordReset />} />
 
-          {/* Public Participant Direct Sharing Route (No authentication required) */}
+          {/* Attendee Portal (Saved Events, Registrations & Interest Preferences) */}
+          <Route path="/saved-events" element={<AttendeePortal />} />
+          <Route path="/my-registrations" element={<AttendeePortal />} />
+
+          {/* Public Participant Direct Flyer Generation Route (Eventra Create - No auth required) */}
           <Route path="/e/:slug" element={<ParticipantFlyerPage />} />
-          <Route path="/event/:slug" element={<ParticipantFlyerPage />} />
           <Route path="/flyer/:slug" element={<ParticipantFlyerPage />} />
           <Route path="/p/:slug" element={<ParticipantFlyerPage />} />
 
@@ -44,6 +56,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/events/manage/:eventId"
+            element={
+              <ProtectedRoute>
+                <ManageEvent />
               </ProtectedRoute>
             }
           />

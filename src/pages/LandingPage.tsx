@@ -5,7 +5,7 @@ import {
   ArrowRight, Upload, MousePointerClick, Download, 
   Share2, ShieldCheck, CheckCircle2, Check, Zap, Layers, RefreshCw, Eye,
   Compass, Ticket, QrCode, Image as ImageIcon, Send, Users, ChevronRight,
-  Building2, Menu, X, Play
+  Building2, Menu, X, Play, Sparkles
 } from 'lucide-react';
 
 import { EventraLogo, EventraLogoSymbol } from '../components/EventraLogo';
@@ -95,13 +95,17 @@ export const LandingPage: React.FC = () => {
             <EventraLogo variant="with-tagline" size="md" />
           </Link>
 
-          {/* Zone 2: 3 Single-line Nav Links (Desktop) */}
-          <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-[#5A5A72]">
+          {/* Zone 2: Nav Links (Desktop) */}
+          <nav className="hidden md:flex items-center gap-7 text-sm font-semibold text-[#5A5A72]">
+            <Link to="/discover" className="text-[#6425E8] hover:text-[#4214B8] font-bold transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5">
+              <Compass className="w-4 h-4 text-[#6425E8]" />
+              <span>Discover Events</span>
+            </Link>
             <a href="#eventra-create" className="hover:text-[#6425E8] transition-colors whitespace-nowrap shrink-0">
               Eventra Create
             </a>
             <a href="#roadmap" className="hover:text-[#6425E8] transition-colors whitespace-nowrap shrink-0">
-              Platform Vision
+              Platform Modules
             </a>
             <a href="#how-it-works" className="hover:text-[#6425E8] transition-colors whitespace-nowrap shrink-0">
               How It Works
@@ -149,6 +153,14 @@ export const LandingPage: React.FC = () => {
         {/* Mobile Dropdown Menu */}
         {mobileMenuOpen && (
           <div className="md:hidden bg-white border-t border-[#E9E8F0] px-6 py-4 space-y-3 shadow-lg animate-in slide-in-from-top-2 duration-150">
+            <Link
+              to="/discover"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block text-sm font-bold text-[#6425E8] py-2 flex items-center gap-2"
+            >
+              <Compass className="w-4 h-4 text-[#6425E8]" />
+              <span>Discover Events Marketplace</span>
+            </Link>
             <a
               href="#eventra-create"
               onClick={() => setMobileMenuOpen(false)}
@@ -239,19 +251,26 @@ export const LandingPage: React.FC = () => {
         {/* Interactive CTAs with entrance animation */}
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3.5 animate-fade-in-up delay-250">
           <Link
-            to="/register"
+            to="/discover"
             className="interactive-btn group relative overflow-hidden w-full sm:w-auto px-7 py-3.5 bg-[#6425E8] hover:bg-[#4214B8] text-white font-semibold text-sm rounded-xl shadow-md hover:shadow-lg hover:shadow-[#6425E8]/25 transition-all flex items-center justify-center space-x-2"
           >
-            <span>Create Free Account</span>
+            <Compass className="w-4 h-4" />
+            <span>Discover Events</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </Link>
-          <a
-            href="#eventra-create"
+          <Link
+            to="/create-event"
+            className="interactive-btn w-full sm:w-auto px-6 py-3.5 bg-[#111126] hover:bg-black text-white font-semibold text-sm rounded-xl transition shadow-xs flex items-center justify-center space-x-2"
+          >
+            <span>Create an Event</span>
+          </Link>
+          <Link
+            to="/e/worship-expression-40"
             className="interactive-btn w-full sm:w-auto px-6 py-3.5 bg-white border border-[#E9E8F0] hover:border-[#6425E8]/50 text-[#111126] font-semibold text-sm rounded-xl hover:bg-[#F8F8FC] transition shadow-xs flex items-center justify-center space-x-2 group"
           >
-            <Play className="w-4 h-4 text-[#6425E8] fill-[#6425E8]/20 group-hover:scale-110 transition-transform" />
-            <span>Try Interactive Demo</span>
-          </a>
+            <Sparkles className="w-4 h-4 text-[#6425E8]" />
+            <span>Generate Live Attendee Flyer</span>
+          </Link>
         </div>
 
         {/* SPOTLIGHT MODULE: EVENTRA CREATE (Interactive Demo Engine) */}

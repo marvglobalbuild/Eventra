@@ -413,5 +413,144 @@ CREATE POLICY "Flyers publicly readable" ON storage.objects FOR SELECT USING (bu
 CREATE POLICY "Authenticated users upload flyers" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'event-flyers' AND auth.role() = 'authenticated');
 CREATE POLICY "Participant photos readable" ON storage.objects FOR SELECT USING (bucket_id = 'participant-photos');
 CREATE POLICY "Public upload participant photos" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'participant-photos');
+
+-- ====================================================
+-- 12. STAGE 1 INCREMENTAL SCHEMA (MANAGE, DISCOVER, REGISTER, INVITE)
+-- ====================================================
+
+-- Additional columns on public.events
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS cover_image_url TEXT;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Other';
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS event_type TEXT DEFAULT 'physical';
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS online_url TEXT;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS visibility TEXT DEFAULT 'public';
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS registration_status TEXT DEFAULT 'open';
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS capacity INTEGER DEFAULT 500;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS start_time TEXT;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS end_time TEXT;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'UTC';
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS venue TEXT;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS city TEXT;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS country TEXT;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS schedule JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS faqs JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT false;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS organiser_name TEXT;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS organiser_email TEXT;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS organiser_contact TEXT;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS event_website TEXT;
+
+-- Event Registrations (Eventra Register)
+CREATE TABLE IF NOT EXISTS public.event_registrations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
+    attendee_user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT,
+    registration_reference TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'confirmed',
+    custom_answers JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Event Registration Forms (Custom Form Builder)
+CREATE TABLE IF NOT EXISTS public.event_registration_forms (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE UNIQUE,
+    is_enabled BOOLEAN DEFAULT true,
+    approval_required BOOLEAN DEFAULT false,
+    fields JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Event Invitations (Eventra Invite)
+CREATE TABLE IF NOT EXISTS public.event_invitations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
+    invited_name TEXT NOT NULL,
+    invited_email TEXT NOT NULL,
+    invited_phone TEXT,
+    invitation_token TEXT NOT NULL UNIQUE,
+    message TEXT,
+    status TEXT NOT NULL DEFAULT 'sent',
+    rsvp_response TEXT DEFAULT 'pending',
+    guest_count INTEGER DEFAULT 1,
+    dietary_preferences TEXT,
+    rsvp_deadline TEXT,
+    created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Saved Events (Attendee Bookmarks)
+CREATE TABLE IF NOT EXISTS public.saved_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT unique_user_saved_event UNIQUE (user_id, event_id)
+);
+
+-- User Interests (Attendee Discovery Preferences)
+CREATE TABLE IF NOT EXISTS public.user_interests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT unique_user_interest UNIQUE (user_id, category)
+);
+
+-- Event Page Analytics
+CREATE TABLE IF NOT EXISTS public.event_analytics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
+    action_type TEXT NOT NULL,
+    visitor_id TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Indexes for optimal query performance
+CREATE INDEX IF NOT EXISTS idx_events_visibility_status ON public.events(visibility, status);
+CREATE INDEX IF NOT EXISTS idx_events_category ON public.events(category);
+CREATE INDEX IF NOT EXISTS idx_events_city ON public.events(city);
+CREATE INDEX IF NOT EXISTS idx_registrations_event ON public.event_registrations(event_id);
+CREATE INDEX IF NOT EXISTS idx_registrations_email ON public.event_registrations(email);
+CREATE INDEX IF NOT EXISTS idx_invitations_token ON public.event_invitations(invitation_token);
+CREATE INDEX IF NOT EXISTS idx_saved_events_user ON public.saved_events(user_id);
+
+-- Stage 1 RLS Policies
+ALTER TABLE public.event_registrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.event_registration_forms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.event_invitations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.saved_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_interests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.event_analytics ENABLE ROW LEVEL SECURITY;
+
+-- Registrations RLS: Organiser can view/manage, Public can insert
+CREATE POLICY "Organisers view registrations" ON public.event_registrations FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.events WHERE events.id = event_registrations.event_id AND events.user_id = auth.uid())
+);
+CREATE POLICY "Public submit registration" ON public.event_registrations FOR INSERT WITH CHECK (true);
+
+-- Invitations RLS: Organiser manages, Public can view & update by token
+CREATE POLICY "Organisers manage invitations" ON public.event_invitations FOR ALL USING (
+    EXISTS (SELECT 1 FROM public.events WHERE events.id = event_invitations.event_id AND events.user_id = auth.uid())
+);
+CREATE POLICY "Public view invitation by token" ON public.event_invitations FOR SELECT USING (true);
+CREATE POLICY "Public update rsvp by token" ON public.event_invitations FOR UPDATE USING (true);
+
+-- Saved Events RLS: Users manage their own bookmarks
+CREATE POLICY "Users manage saved events" ON public.saved_events FOR ALL USING (user_id = auth.uid());
+
+-- User Interests RLS
+CREATE POLICY "Users manage interests" ON public.user_interests FOR ALL USING (user_id = auth.uid());
 `;
+
 

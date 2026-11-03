@@ -2,6 +2,11 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type UserRole = 'platform_admin' | 'organisation_owner' | 'organisation_admin' | 'event_manager' | 'team_member';
 
+export type EventVisibility = 'public' | 'unlisted' | 'private';
+export type EventPublicationStatus = 'draft' | 'published' | 'completed' | 'cancelled' | 'archived';
+export type EventRegistrationState = 'open' | 'closed' | 'invite_only';
+export type EventFormat = 'physical' | 'online' | 'hybrid';
+
 export interface Profile {
   id: string;
   full_name: string | null;
@@ -9,6 +14,8 @@ export interface Profile {
   avatar_url?: string;
   role?: UserRole;
   current_org_id?: string;
+  location_city?: string;
+  location_country?: string;
   created_at: string;
 }
 
@@ -37,18 +44,52 @@ export interface OrganisationMember {
   joined_at: string;
 }
 
+export interface EventScheduleItem {
+  time: string;
+  title: string;
+  description?: string;
+}
+
+export interface EventFaqItem {
+  question: string;
+  answer: string;
+}
+
 export interface FlyerEvent {
   id: string;
   user_id: string;
   org_id?: string;
   event_name: string;
+  title?: string; // Standard alias for event_name
   slug: string;
   original_flyer_path: string;
   original_flyer_data_url?: string; // For local/offline storage caching
-  status: 'draft' | 'published' | 'archived';
+  cover_image_url?: string; // Cover image for Discover & Event page
+  status: EventPublicationStatus;
+  visibility?: EventVisibility; // 'public' | 'unlisted' | 'private'
+  registration_status?: EventRegistrationState; // 'open' | 'closed' | 'invite_only'
   category?: string;
+  description?: string;
   venue?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  event_type?: EventFormat;
+  online_url?: string;
   event_date?: string;
+  start_time?: string;
+  end_time?: string;
+  timezone?: string;
+  capacity?: number;
+  registration_open_at?: string;
+  registration_close_at?: string;
+  is_featured?: boolean;
+  organiser_name?: string;
+  organiser_email?: string;
+  organiser_contact?: string;
+  event_website?: string;
+  schedule?: EventScheduleItem[];
+  faqs?: EventFaqItem[];
   created_at: string;
   updated_at: string;
 }
@@ -101,6 +142,80 @@ export interface FlyerDownload {
   downloaded_at: string;
 }
 
+export interface EventRegistration {
+  id: string;
+  event_id: string;
+  attendee_user_id?: string | null;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+  registration_reference: string; // e.g. EVT-7X9K2
+  status: 'confirmed' | 'pending' | 'cancelled' | 'waitlisted' | 'rejected';
+  custom_answers?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RegistrationFormField {
+  id: string;
+  label: string;
+  type: 'text' | 'textarea' | 'select' | 'checkbox' | 'radio';
+  required: boolean;
+  options?: string[];
+}
+
+export interface RegistrationFormConfig {
+  id: string;
+  event_id: string;
+  is_enabled: boolean;
+  approval_required: boolean;
+  fields: RegistrationFormField[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EventInvitation {
+  id: string;
+  event_id: string;
+  invited_name: string;
+  invited_email: string;
+  invited_phone?: string;
+  invitation_token: string;
+  message?: string;
+  status: 'draft' | 'sent' | 'delivered' | 'opened' | 'accepted' | 'declined' | 'maybe' | 'expired';
+  rsvp_response?: 'accepted' | 'declined' | 'maybe' | 'pending';
+  guest_count: number;
+  dietary_preferences?: string;
+  rsvp_deadline?: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavedEvent {
+  id: string;
+  user_id: string;
+  event_id: string;
+  created_at: string;
+}
+
+export interface UserInterest {
+  id: string;
+  user_id: string;
+  category: string;
+  created_at: string;
+}
+
+export interface EventPageAnalytic {
+  id: string;
+  event_id: string;
+  action_type: 'view' | 'register_click' | 'register_submit' | 'invite_click' | 'rsvp_accept' | 'rsvp_decline' | 'event_save' | 'share';
+  visitor_id: string;
+  metadata?: Record<string, any>;
+  timestamp: string;
+}
+
 export interface FeatureModule {
   id: string;
   module_key: string;
@@ -116,7 +231,7 @@ export interface FeatureModule {
 export interface SiteVisit {
   id: string;
   visitor_id: string; // Anonymous persistent visitor UUID
-  path: string;       // e.g. '/', '/e/worship-expression-40', '/login'
+  path: string;       // e.g. '/', '/events/worship-expression-40', '/login'
   event_slug?: string;
   referrer?: string;
   device_type: 'desktop' | 'mobile' | 'tablet';
@@ -153,7 +268,7 @@ export interface VisitorStats {
 export interface AttendeeCrmRecord extends Participant {
   event_name: string;
   event_slug: string;
-  event_status: 'published' | 'draft' | 'archived';
+  event_status: EventPublicationStatus;
   downloads_count: number;
   download_formats: string[];
   last_download_at?: string;
@@ -180,5 +295,6 @@ export interface PlatformOverviewMetrics {
   publishedEvents: number;
   totalAttendees: number;
   totalDownloads: number;
-  conversionRate: number; // % of visitors who download flyers
+  totalRegistrations?: number;
+  conversionRate: number;
 }
