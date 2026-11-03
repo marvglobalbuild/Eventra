@@ -14,7 +14,7 @@ import { EventraLogo, EventraLogoSymbol } from '../components/EventraLogo';
 import { 
   Camera, Upload, Download, FileImage, FileText, CheckCircle2, 
   RefreshCw, Loader2, AlertCircle, Sparkles, ArrowLeft, Shield, Calendar, 
-  ChevronRight, ZoomIn, ZoomOut, Plus, Minus, RotateCcw, Move, Check
+  ChevronRight, ZoomIn, ZoomOut, Plus, Minus, RotateCcw, Move, Check, Maximize2
 } from 'lucide-react';
 
 export const ParticipantFlyerPage: React.FC = () => {
@@ -41,6 +41,7 @@ export const ParticipantFlyerPage: React.FC = () => {
 
   // Photo Framing & Zoom Controls
   const [zoom, setZoom] = useState<number>(1.25);
+  const [frameScale, setFrameScale] = useState<number>(1.0);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
   const dragStartRef = useRef<{ startX: number; startY: number; origPanX: number; origPanY: number }>({
@@ -200,14 +201,14 @@ export const ParticipantFlyerPage: React.FC = () => {
       tmpl = {
         id: `tmpl_${ev.id}`,
         event_id: ev.id,
-        photo_x: 0.35,
-        photo_y: 0.28,
-        photo_width: 0.30,
-        photo_height: 0.30,
+        photo_x: 0.28,
+        photo_y: 0.26,
+        photo_width: 0.44,
+        photo_height: 0.44,
         photo_shape: 'circle',
-        photo_crop_settings: { zoom: 1 },
+        photo_crop_settings: { zoom: 1, frameScale: 1.0 },
         name_x: 0.15,
-        name_y: 0.60,
+        name_y: 0.62,
         name_width: 0.70,
         name_height: 0.08,
         font_family: 'Plus Jakarta Sans, sans-serif',
@@ -222,6 +223,13 @@ export const ParticipantFlyerPage: React.FC = () => {
       db.saveTemplate(tmpl);
     }
     setTemplate(tmpl);
+
+    // Auto-detect if template has small circle width on flyer with large cutout, setting smart fill default
+    if (tmpl.photo_shape === 'circle' && tmpl.photo_width <= 0.32) {
+      setFrameScale(tmpl.photo_crop_settings?.frameScale ?? 1.45);
+    } else if (tmpl.photo_crop_settings?.frameScale) {
+      setFrameScale(tmpl.photo_crop_settings.frameScale);
+    }
 
     // 7. Resolve flyer image source
     let resolved = await resolveFlyerSource(ev.original_flyer_path, ev.original_flyer_data_url);
@@ -336,6 +344,7 @@ export const ParticipantFlyerPage: React.FC = () => {
           zoom,
           offsetX: normalizedOffsetX,
           offsetY: normalizedOffsetY,
+          frameScale,
         },
       });
 
@@ -587,9 +596,13 @@ export const ParticipantFlyerPage: React.FC = () => {
 
                     {/* Circular or Rectangular Cutout Frame */}
                     <div
-                      className={`relative w-44 h-44 overflow-hidden ring-4 ring-white shadow-2xl transition-all ${
+                      className={`relative overflow-hidden ring-4 ring-white shadow-2xl transition-all ${
                         template?.photo_shape === 'circle' ? 'rounded-full' : 'rounded-2xl'
                       }`}
+                      style={{
+                        width: `${Math.round(176 * Math.min(1.28, Math.max(0.85, frameScale))) }px`,
+                        height: `${Math.round(176 * Math.min(1.28, Math.max(0.85, frameScale))) }px`,
+                      }}
                     >
                       <img
                         src={photoPreviewUrl}
@@ -685,6 +698,84 @@ export const ParticipantFlyerPage: React.FC = () => {
                       >
                         <RotateCcw className="w-3 h-3" />
                         <span>Center</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Frame Size / Fill White Space Controls */}
+                  <div className="space-y-2 pt-2 bg-white p-3 rounded-xl border border-[#E9E8F0]">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-[#111126] flex items-center gap-1.5">
+                        <Maximize2 className="w-3.5 h-3.5 text-[#6425E8]" />
+                        <span>Photo Circle Size (Fill White Space)</span>
+                      </span>
+                      <span className="font-mono font-bold text-[#6425E8] bg-[#6425E8]/10 px-2 py-0.5 rounded-md text-[11px]">
+                        {Math.round(frameScale * 100)}% ({frameScale >= 1.3 ? 'Filling Cutout' : 'Standard'})
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setFrameScale((prev) => Math.max(0.8, Number((prev - 0.1).toFixed(2))))}
+                        className="w-8 h-8 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-sm shadow-2xs active:scale-95 transition"
+                        title="Shrink Circle Size"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+
+                      <input
+                        type="range"
+                        min="0.8"
+                        max="2.2"
+                        step="0.05"
+                        value={frameScale}
+                        onChange={(e) => setFrameScale(parseFloat(e.target.value))}
+                        className="flex-1 accent-[#6425E8] h-2 bg-[#E9E8F0] rounded-lg cursor-pointer"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setFrameScale((prev) => Math.min(2.2, Number((prev + 0.1).toFixed(2))))}
+                        className="w-8 h-8 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-sm shadow-2xs active:scale-95 transition"
+                        title="Expand Circle to Fill Space"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Quick Presets for Filling White Space */}
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { label: 'Normal (1x)', val: 1.0 },
+                          { label: 'Fill Cutout (1.35x)', val: 1.35 },
+                          { label: 'Full White Space (1.45x)', val: 1.45 },
+                          { label: 'Extra Large (1.7x)', val: 1.7 },
+                        ].map((p) => (
+                          <button
+                            key={p.val}
+                            type="button"
+                            onClick={() => setFrameScale(p.val)}
+                            className={`px-2 py-0.5 text-[10px] font-semibold rounded-md transition ${
+                              Math.abs(frameScale - p.val) < 0.04
+                                ? 'bg-[#6425E8] text-white shadow-xs'
+                                : 'bg-[#F8F8FC] border border-[#E9E8F0] text-[#73738A] hover:text-[#111126]'
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setFrameScale(1.0)}
+                        className="text-[10px] font-semibold text-[#73788A] hover:text-[#111126] flex items-center gap-1"
+                        title="Reset circle size"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Reset</span>
                       </button>
                     </div>
                   </div>

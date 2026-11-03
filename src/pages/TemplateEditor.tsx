@@ -64,14 +64,14 @@ export const TemplateEditor: React.FC = () => {
       tmpl = {
         id: `tmpl_${Date.now()}`,
         event_id: eventId,
-        photo_x: 0.35,
-        photo_y: 0.28,
-        photo_width: 0.30,
-        photo_height: 0.30,
+        photo_x: 0.28,
+        photo_y: 0.26,
+        photo_width: 0.44,
+        photo_height: 0.44,
         photo_shape: 'circle',
-        photo_crop_settings: { zoom: 1 },
+        photo_crop_settings: { zoom: 1, frameScale: 1.0 },
         name_x: 0.15,
-        name_y: 0.60,
+        name_y: 0.62,
         name_width: 0.70,
         name_height: 0.08,
         font_family: 'Plus Jakarta Sans, sans-serif',
@@ -632,13 +632,15 @@ export const TemplateEditor: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#73738A]">
                     <span>Photo Diameter / Width</span>
-                    <span className="font-mono text-[#111126]">{Math.round(template.photo_width * 100)}%</span>
+                    <span className="font-mono font-bold text-[#6425E8] bg-[#6425E8]/10 px-2 py-0.5 rounded text-[11px]">
+                      {Math.round(template.photo_width * 100)}%
+                    </span>
                   </div>
                   <input
                     type="range"
                     min="0.1"
-                    max="0.6"
-                    step="0.01"
+                    max="0.85"
+                    step="0.005"
                     value={template.photo_width}
                     onChange={(e) => {
                       const val = parseFloat(e.target.value);
@@ -647,6 +649,44 @@ export const TemplateEditor: React.FC = () => {
                     }}
                     className="w-full mt-2 accent-[#6425E8]"
                   />
+
+                  {/* Quick Cutout Size Presets */}
+                  <div className="flex flex-wrap gap-1.5 mt-2.5">
+                    {[
+                      { label: 'Small (30%)', val: 0.30 },
+                      { label: 'Medium (38%)', val: 0.38 },
+                      { label: 'Fill Cutout (46%)', val: 0.46 },
+                      { label: 'Large (54%)', val: 0.54 },
+                      { label: 'Hero (62%)', val: 0.62 },
+                    ].map((p) => (
+                      <button
+                        key={p.val}
+                        type="button"
+                        onClick={() => {
+                          const oldW = template.photo_width;
+                          const oldH = template.photo_height;
+                          const centerX = template.photo_x + oldW / 2;
+                          const centerY = template.photo_y + oldH / 2;
+                          const newX = Math.max(0, Math.min(1 - p.val, Number((centerX - p.val / 2).toFixed(4))));
+                          const newY = Math.max(0, Math.min(1 - p.val, Number((centerY - p.val / 2).toFixed(4))));
+                          setTemplate({
+                            ...template,
+                            photo_width: p.val,
+                            photo_height: p.val,
+                            photo_x: newX,
+                            photo_y: newY,
+                          });
+                        }}
+                        className={`px-2 py-0.5 text-[10px] font-semibold rounded-md transition ${
+                          Math.abs(template.photo_width - p.val) < 0.03
+                            ? 'bg-[#6425E8] text-white shadow-2xs'
+                            : 'bg-[#F8F8FC] border border-[#E9E8F0] text-[#73738A] hover:text-[#111126]'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="pt-2 text-[11px] text-[#73738A] bg-[#F8F8FC] p-3 rounded-xl border border-[#E9E8F0]">

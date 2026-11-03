@@ -6,6 +6,7 @@ export interface PhotoCropSettings {
   zoom?: number; // 1.0 to 3.5 (100% to 350%)
   offsetX?: number; // -1 to 1 (horizontal pan)
   offsetY?: number; // -1 to 1 (vertical pan)
+  frameScale?: number; // 0.8 to 2.5 (scales the photo container / circle to fill white spaces)
 }
 
 export interface CompositePayload {
@@ -132,19 +133,38 @@ export async function renderPersonalisedFlyer(payload: CompositePayload): Promis
   const photoY = Number(template.photo_y) * height;
   const photoW = Number(template.photo_width) * width;
   const photoH = Number(template.photo_height) * height;
+  // Frame scale allows expanding or shrinking the cutout to fill white flyer placeholders
+  const frameScale = cropSettings?.frameScale ?? template.photo_crop_settings?.frameScale ?? 1.0;
+  const centerX = photoX + photoW / 2;
+  const centerY = photoY + photoH / 2;
+
+  let drawX = photoX;
+  let drawY = photoY;
+  let drawW = photoW;
+  let drawH = photoH;
 
   // 3. Render Participant Photo with shape clipping and custom zoom/pan
   ctx.save();
   ctx.beginPath();
   if (template.photo_shape === 'circle') {
-    const centerX = photoX + photoW / 2;
-    const centerY = photoY + photoH / 2;
-    const radius = Math.min(photoW, photoH) / 2;
+    const radius = (Math.min(photoW, photoH) / 2) * frameScale;
     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2, true);
+    drawX = centerX - radius;
+    drawY = centerY - radius;
+    drawW = radius * 2;
+    drawH = radius * 2;
   } else {
     // Rounded rectangle or sharp rectangle
-    const cornerRadius = template.photo_crop_settings?.borderRadius ?? (Math.min(photoW, photoH) * 0.08);
-    ctx.roundRect(photoX, photoY, photoW, photoH, cornerRadius);
+    const targetW = photoW * frameScale;
+    const targetH = photoH * frameScale;
+    const targetX = centerX - targetW / 2;
+    const targetY = centerY - targetH / 2;
+    const cornerRadius = template.photo_crop_settings?.borderRadius ?? (Math.min(targetW, targetH) * 0.08);
+    ctx.roundRect(targetX, targetY, targetW, targetH, cornerRadius);
+    drawX = targetX;
+    drawY = targetY;
+    drawW = targetW;
+    drawH = targetH;
   }
   ctx.closePath();
   ctx.clip();
@@ -153,7 +173,7 @@ export async function renderPersonalisedFlyer(payload: CompositePayload): Promis
   const offsetX = cropSettings?.offsetX ?? 0;
   const offsetY = cropSettings?.offsetY ?? 0;
 
-  drawImageCoverWithCrop(ctx, participantImg, photoX, photoY, photoW, photoH, zoom, offsetX, offsetY);
+  drawImageCoverWithCrop(ctx, participantImg, drawX, drawY, drawW, drawH, zoom, offsetX, offsetY);
   ctx.restore();
 
   // 4. Render Participant Name with strict auto-fitting into designated bounding box
