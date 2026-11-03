@@ -18,7 +18,7 @@ import {
 export const ManageEvent: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isHost, becomeHost } = useAuth();
 
   const [event, setEvent] = useState<FlyerEvent | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'attendees' | 'invitations' | 'form' | 'create' | 'settings'>('overview');
@@ -59,6 +59,7 @@ export const ManageEvent: React.FC = () => {
   const [editCapacity, setEditCapacity] = useState(500);
 
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedFlyerLink, setCopiedFlyerLink] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [savedSettingsNotice, setSavedSettingsNotice] = useState(false);
 
@@ -103,6 +104,36 @@ export const ManageEvent: React.FC = () => {
     return (
       <div className="min-h-screen bg-[#F8F8FC] flex items-center justify-center">
         <div className="w-8 h-8 border-3 border-[#6425E8] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isHost) {
+    return (
+      <div className="min-h-screen bg-[#F8F8FC] flex flex-col font-sans">
+        <Navbar />
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="bg-white max-w-md w-full p-8 rounded-2xl border border-[#E9E8F0] shadow-sm text-center space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center mx-auto">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <h2 className="text-xl font-bold text-[#111126]">Host Access Required</h2>
+            <p className="text-xs text-[#73738A] leading-relaxed">
+              Event management is restricted to authorized event hosts. Activate your host experience to manage events.
+            </p>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  await becomeHost();
+                }}
+                className="w-full py-2.5 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
+              >
+                Activate Host Experience
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -829,11 +860,12 @@ export const ManageEvent: React.FC = () => {
                   type="button"
                   onClick={() => {
                     navigator.clipboard.writeText(`${window.location.origin}/e/${event.slug || event.id}`);
-                    alert('Copied participant flyer link!');
+                    setCopiedFlyerLink(true);
+                    setTimeout(() => setCopiedFlyerLink(false), 2500);
                   }}
-                  className="text-xs font-semibold text-[#6425E8] hover:underline"
+                  className="text-xs font-semibold text-[#6425E8] hover:underline cursor-pointer"
                 >
-                  Click to copy participant flyer link
+                  {copiedFlyerLink ? '✓ Copied participant flyer link!' : 'Click to copy participant flyer link'}
                 </button>
               </div>
             </div>

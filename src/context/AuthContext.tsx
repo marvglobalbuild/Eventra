@@ -17,8 +17,12 @@ interface AuthContextType {
   organisations: Organisation[];
   loading: boolean;
   isSupabase: boolean;
-  signIn: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
-  signUp: (email: string, pass: string, fullName: string, orgName?: string) => Promise<{ success: boolean; error?: string }>;
+  isHost: boolean;
+  activeView: 'host' | 'attendee';
+  signIn: (email: string, pass: string) => Promise<{ success: boolean; error?: string; accountType?: 'host' | 'attendee' }>;
+  signUp: (email: string, pass: string, fullName: string, accountType: 'host' | 'attendee', orgName?: string) => Promise<{ success: boolean; error?: string; accountType?: 'host' | 'attendee' }>;
+  becomeHost: (orgName?: string) => Promise<{ success: boolean; error?: string }>;
+  switchView: (view: 'host' | 'attendee') => void;
   signOut: () => Promise<void>;
   updateName: (newName: string) => void;
   switchOrganisation: (orgId: string) => void;
@@ -31,8 +35,12 @@ const AuthContext = createContext<AuthContextType>({
   organisations: [],
   loading: true,
   isSupabase: false,
+  isHost: false,
+  activeView: 'attendee',
   signIn: async () => ({ success: false }),
   signUp: async () => ({ success: false }),
+  becomeHost: async () => ({ success: false }),
+  switchView: () => {},
   signOut: async () => {},
   updateName: () => {},
   switchOrganisation: () => {},
@@ -101,11 +109,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const found = accounts.find((a) => a.email.toLowerCase() === activeSessionEmail.toLowerCase());
 
         if (found) {
+          const isHostUser = found.is_host === true || found.account_type === 'host' || (!found.account_type && found.role !== 'attendee');
+          const activeViewMode: 'host' | 'attendee' = found.active_view || (isHostUser ? 'host' : 'attendee');
+
           const userProf: Profile = {
             id: found.id,
             full_name: found.full_name,
             email: found.email,
-            role: 'organisation_owner',
+            role: isHostUser ? 'organisation_owner' : 'attendee',
+            account_type: found.account_type || (isHostUser ? 'host' : 'attendee'),
+            is_host: isHostUser,
+            active_view: activeViewMode,
             current_org_id: found.org_id,
             created_at: found.created_at,
           };
@@ -153,7 +167,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signIn = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
+  const signIn = async (
+    email: string, 
+    pass: string
+  ): Promise<{ success: boolean; error?: string; accountType?: 'host' | 'attendee' }> => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPass = pass.trim();
 
@@ -169,7 +186,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           password: cleanPass 
         });
         if (error) {
-          // Fall through to local accounts check if Supabase login fails
           console.warn('Supabase login check:', error.message);
         } else if (data.user) {
           const userEmail = data.user.email || cleanEmail;
@@ -178,6 +194,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             full_name: data.user.user_metadata?.full_name || userEmail.split('@')[0],
             email: userEmail,
             role: 'organisation_owner',
+            account_type: 'host',
+            is_host: true,
+            active_view: 'host',
             current_org_id: `org_${data.user.id}`,
             created_at: new Date().toISOString(),
           };
@@ -194,7 +213,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             created_at: new Date().toISOString(),
           };
           setCurrentOrg(userOrg);
-          return { success: true };
+          return { success: true, accountType: 'host' };
         }
       } catch (err: any) {
         console.warn('Supabase sign-in catch:', err);
@@ -219,13 +238,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
-    // Credentials match - log in user to their workspace
+    // Credentials match - log in user
     setAuthSession(cleanEmail);
+    const isHostUser = account.is_host === true || account.account_type === 'host' || (!account.account_type && account.role !== 'attendee');
+    const activeViewMode: 'host' | 'attendee' = account.active_view || (isHostUser ? 'host' : 'attendee');
+
     const userProfile: Profile = {
       id: account.id,
       full_name: account.full_name,
       email: account.email,
-      role: 'organisation_owner',
+      role: isHostUser ? 'organisation_owner' : 'attendee',
+      account_type: account.account_type || (isHostUser ? 'host' : 'attendee'),
+      is_host: isHostUser,
+      active_view: activeViewMode,
       current_org_id: account.org_id,
       created_at: account.created_at,
     };
@@ -234,7 +259,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const orgs = db.getOrganisations();
     let matchedOrg = orgs.find((o) => o.id === account.org_id);
-    if (!matchedOrg) {
+    if (!matchedOrg && isHostUser) {
       matchedOrg = {
         id: account.org_id,
         name: account.org_name || `${account.full_name}'s Workspace`,
@@ -245,22 +270,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       db.saveOrganisation(matchedOrg);
     }
-    setCurrentOrg(matchedOrg);
-    setOrganisations([matchedOrg]);
+    if (matchedOrg) {
+      setCurrentOrg(matchedOrg);
+      setOrganisations([matchedOrg]);
+    }
 
-    return { success: true };
+    return { 
+      success: true, 
+      accountType: userProfile.account_type || (userProfile.is_host ? 'host' : 'attendee') 
+    };
   };
 
   const signUp = async (
     email: string, 
     pass: string, 
     fullName: string, 
+    accountType: 'host' | 'attendee' = 'attendee',
     orgName?: string
-  ): Promise<{ success: boolean; error?: string }> => {
+  ): Promise<{ success: boolean; error?: string; accountType?: 'host' | 'attendee' }> => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPass = pass.trim();
     const cleanName = fullName.trim();
-    const cleanOrg = orgName?.trim() || `${cleanName}'s Workspace`;
+    const isHost = accountType === 'host';
+    const cleanOrg = orgName?.trim() || `${cleanName}'s Events`;
 
     if (!cleanEmail || !cleanPass || !cleanName) {
       return { success: false, error: 'Please provide your full name, email address, and a password.' };
@@ -284,7 +316,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data, error } = await sb.auth.signUp({
           email: cleanEmail,
           password: cleanPass,
-          options: { data: { full_name: cleanName, org_name: cleanOrg } },
+          options: { 
+            data: { 
+              full_name: cleanName, 
+              org_name: cleanOrg,
+              account_type: accountType,
+              is_host: isHost,
+            } 
+          },
         });
         if (error) {
           console.warn('Supabase remote sign up notice:', error.message);
@@ -298,23 +337,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newUserId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const newOrgId = `org_${Date.now()}`;
 
-    const newOrganisation: Organisation = {
-      id: newOrgId,
-      name: cleanOrg,
-      slug: cleanOrg.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'workspace',
-      owner_id: newUserId,
-      plan: 'professional',
-      created_at: new Date().toISOString(),
-    };
-    db.saveOrganisation(newOrganisation);
+    let newOrganisation: Organisation | null = null;
+    if (isHost) {
+      newOrganisation = {
+        id: newOrgId,
+        name: cleanOrg,
+        slug: cleanOrg.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'workspace',
+        owner_id: newUserId,
+        plan: 'professional',
+        created_at: new Date().toISOString(),
+      };
+      db.saveOrganisation(newOrganisation);
+    }
 
     const newAccount: StoredAccount = {
       id: newUserId,
       email: cleanEmail,
       password: cleanPass,
       full_name: cleanName,
-      org_id: newOrgId,
-      org_name: cleanOrg,
+      org_id: isHost ? newOrgId : '',
+      org_name: isHost ? cleanOrg : '',
+      account_type: accountType,
+      is_host: isHost,
+      active_view: isHost ? 'host' : 'attendee',
       created_at: new Date().toISOString(),
     };
     saveStoredAccount(newAccount);
@@ -325,18 +370,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: newUserId,
       full_name: cleanName,
       email: cleanEmail,
-      role: 'organisation_owner',
-      current_org_id: newOrgId,
+      role: isHost ? 'organisation_owner' : 'attendee',
+      account_type: accountType,
+      is_host: isHost,
+      active_view: isHost ? 'host' : 'attendee',
+      current_org_id: isHost ? newOrgId : undefined,
       created_at: new Date().toISOString(),
     };
     safeLocalStorageSet(LS_USER_KEY, JSON.stringify(newProfile));
-    safeLocalStorageSet(LS_CURRENT_ORG_KEY, newOrgId);
+    if (isHost) {
+      safeLocalStorageSet(LS_CURRENT_ORG_KEY, newOrgId);
+    }
 
     setProfile(newProfile);
-    setCurrentOrg(newOrganisation);
-    setOrganisations([newOrganisation]);
+    if (newOrganisation) {
+      setCurrentOrg(newOrganisation);
+      setOrganisations([newOrganisation]);
+    } else {
+      setCurrentOrg(null);
+      setOrganisations([]);
+    }
 
+    return { success: true, accountType };
+  };
+
+  const becomeHost = async (orgName?: string): Promise<{ success: boolean; error?: string }> => {
+    if (!profile) {
+      return { success: false, error: 'You must be signed in to become a host.' };
+    }
+    const res = db.upgradeUserToHost(orgName);
+    if (!res) {
+      return { success: false, error: 'Could not upgrade account to host.' };
+    }
+
+    setProfile(res.profile);
+    setCurrentOrg(res.organisation);
+    setOrganisations(db.getOrganisations());
     return { success: true };
+  };
+
+  const switchView = (view: 'host' | 'attendee') => {
+    if (!profile) return;
+    const updated = db.switchUserActiveView(view);
+    if (updated) {
+      setProfile(updated);
+    } else {
+      const fallback: Profile = { ...profile, active_view: view };
+      setProfile(fallback);
+      safeLocalStorageSet(LS_USER_KEY, JSON.stringify(fallback));
+    }
   };
 
   const signOut = async () => {
@@ -363,6 +445,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (updated) setProfile(updated);
   };
 
+  const isHost = Boolean(
+    profile?.is_host === true || 
+    profile?.account_type === 'host' || 
+    profile?.role === 'organisation_owner' || 
+    profile?.role === 'platform_admin'
+  );
+  
+  const activeView: 'host' | 'attendee' = 
+    (profile?.active_view || (isHost ? 'host' : 'attendee')) as 'host' | 'attendee';
+
   return (
     <AuthContext.Provider
       value={{
@@ -372,8 +464,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         organisations,
         loading,
         isSupabase,
+        isHost,
+        activeView,
         signIn,
         signUp,
+        becomeHost,
+        switchView,
         signOut,
         updateName,
         switchOrganisation,

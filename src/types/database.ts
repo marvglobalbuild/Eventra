@@ -1,6 +1,6 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-export type UserRole = 'platform_admin' | 'organisation_owner' | 'organisation_admin' | 'event_manager' | 'team_member';
+export type UserRole = 'platform_admin' | 'organisation_owner' | 'organisation_admin' | 'event_manager' | 'team_member' | 'attendee' | 'host';
 
 export type EventVisibility = 'public' | 'unlisted' | 'private';
 export type EventPublicationStatus = 'draft' | 'published' | 'completed' | 'cancelled' | 'archived';
@@ -13,6 +13,9 @@ export interface Profile {
   email: string;
   avatar_url?: string;
   role?: UserRole;
+  account_type?: 'host' | 'attendee';
+  is_host?: boolean;
+  active_view?: 'host' | 'attendee';
   current_org_id?: string;
   location_city?: string;
   location_country?: string;

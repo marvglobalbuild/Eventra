@@ -17,6 +17,7 @@ import {
 } from '../lib/face-detection';
 import { createSamplePortraitDataUrl, createSampleFlyerDataUrl } from '../lib/sample-flyers';
 import { EventraLogo } from '../components/EventraLogo';
+import { Navbar } from '../components/Navbar';
 import { 
   Camera, Upload, Download, FileImage, FileText, CheckCircle2, 
   RefreshCw, Loader2, AlertCircle, ArrowLeft, Shield, Calendar, 
@@ -487,67 +488,69 @@ export const ParticipantFlyerPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F8F8FC] flex flex-col items-center justify-center p-4">
-        <Loader2 className="w-8 h-8 text-[#6425E8] animate-spin mb-3" />
-        <p className="text-xs font-semibold text-[#73738A]">Loading Event Flyer...</p>
+      <div className="min-h-screen bg-[#F8F8FC] flex flex-col font-sans">
+        <Navbar />
+        <div className="flex-1 flex flex-col items-center justify-center p-4">
+          <Loader2 className="w-8 h-8 text-[#6425E8] animate-spin mb-3" />
+          <p className="text-xs font-semibold text-[#73738A]">Loading Event Flyer...</p>
+        </div>
       </div>
     );
   }
 
   if (notFound || !event) {
     return (
-      <div className="min-h-screen bg-[#F8F8FC] flex flex-col items-center justify-center p-4 sm:p-6 text-center font-sans">
-        <div className="mb-6">
-          <EventraLogo variant="with-tagline" size="md" />
-        </div>
-
-        <div className="w-full max-w-md bg-white rounded-2xl border border-[#E9E8F0] p-6 sm:p-8 shadow-sm">
-          <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-600 mx-auto mb-4 border border-amber-200">
-            <AlertCircle className="w-6 h-6" />
-          </div>
-          <h2 className="text-lg font-bold text-[#111126]">Event Link Not Found</h2>
-          <p className="text-xs text-[#73738A] mt-1.5 leading-relaxed">
-            We couldn't locate an event matching <code className="bg-[#F1F3F9] px-1.5 py-0.5 rounded text-[#111126] font-mono">/e/{slug}</code>. The link may have changed or the organiser may have updated the event address.
-          </p>
-
-          {availableEvents.length > 0 && (
-            <div className="mt-6 pt-6 border-t border-[#E9E8F0] text-left">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-3">
-                Active Events You Can Personalise
-              </span>
-              <div className="space-y-2.5">
-                {availableEvents.slice(0, 3).map((av) => (
-                  <button
-                    key={av.id}
-                    onClick={() => navigate(`/e/${av.slug}`)}
-                    className="interactive-card w-full p-3 bg-[#F8F8FC] hover:bg-white border border-[#E9E8F0] hover:border-[#6425E8] rounded-xl text-left transition flex items-center justify-between group"
-                  >
-                    <div className="min-w-0 pr-2">
-                      <p className="text-xs font-bold text-[#111126] truncate">{av.event_name}</p>
-                      <p className="text-[10px] text-[#73738A] truncate">{av.venue || 'Virtual & In-Person'}</p>
-                    </div>
-                    <span className="text-[10px] font-bold text-[#6425E8] shrink-0 group-hover:translate-x-0.5 transition-transform">
-                      Open Flyer →
-                    </span>
-                  </button>
-                ))}
-              </div>
+      <div className="min-h-screen bg-[#F8F8FC] flex flex-col font-sans">
+        <Navbar />
+        <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 text-center font-sans">
+          <div className="w-full max-w-md bg-white rounded-2xl border border-[#E9E8F0] p-6 sm:p-8 shadow-sm">
+            <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-600 mx-auto mb-4 border border-amber-200">
+              <AlertCircle className="w-6 h-6" />
             </div>
-          )}
+            <h2 className="text-lg font-bold text-[#111126]">Event Link Not Found</h2>
+            <p className="text-xs text-[#73738A] mt-1.5 leading-relaxed">
+              We couldn't locate an event matching <code className="bg-[#F1F3F9] px-1.5 py-0.5 rounded text-[#111126] font-mono">/e/{slug}</code>. The link may have changed or the organiser may have updated the event address.
+            </p>
 
-          <div className="mt-6 pt-4 border-t border-[#E9E8F0] flex flex-col sm:flex-row items-center gap-2">
-            <Link
-              to="/"
-              className="interactive-btn w-full py-2.5 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-semibold rounded-xl shadow-sm transition"
-            >
-              Go to Eventra Homepage
-            </Link>
-            <Link
-              to="/dashboard"
-              className="interactive-btn w-full py-2.5 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] text-xs font-semibold rounded-xl transition"
-            >
-              Organiser Workspace
-            </Link>
+            {availableEvents.length > 0 && (
+              <div className="mt-6 pt-6 border-t border-[#E9E8F0] text-left">
+                <span className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-3">
+                  Active Events You Can Personalise
+                </span>
+                <div className="space-y-2.5">
+                  {availableEvents.slice(0, 3).map((av) => (
+                    <button
+                      key={av.id}
+                      onClick={() => navigate(`/e/${av.slug}`)}
+                      className="interactive-card w-full p-3 bg-[#F8F8FC] hover:bg-white border border-[#E9E8F0] hover:border-[#6425E8] rounded-xl text-left transition flex items-center justify-between group"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <p className="text-xs font-bold text-[#111126] truncate">{av.event_name}</p>
+                        <p className="text-[10px] text-[#73738A] truncate">{av.venue || 'Virtual & In-Person'}</p>
+                      </div>
+                      <span className="text-[10px] font-bold text-[#6425E8] shrink-0 group-hover:translate-x-0.5 transition-transform">
+                        Open Flyer →
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6 pt-4 border-t border-[#E9E8F0] flex flex-col sm:flex-row items-center gap-2">
+              <Link
+                to="/"
+                className="interactive-btn w-full py-2.5 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-semibold rounded-xl shadow-sm transition"
+              >
+                Go to Eventra Homepage
+              </Link>
+              <Link
+                to="/dashboard"
+                className="interactive-btn w-full py-2.5 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] text-xs font-semibold rounded-xl transition"
+              >
+                Organiser Workspace
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -557,11 +560,11 @@ export const ParticipantFlyerPage: React.FC = () => {
   const resolvedTextColor = template?.text_color || '#111126';
 
   return (
-    <div className="min-h-screen bg-[#F8F8FC] pt-3.5 pb-8 sm:py-8 px-0 sm:px-4 flex flex-col items-center justify-start sm:justify-center font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8] overflow-x-hidden w-full">
-      {/* Brand Header */}
-      <div className="py-2 px-4 sm:mb-6 sm:p-0 flex flex-col items-center shrink-0">
-        <EventraLogo variant="with-tagline" size="md" />
-      </div>
+    <div className="min-h-screen bg-[#F8F8FC] flex flex-col font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8] overflow-x-hidden w-full">
+      {/* Top Application Bar */}
+      <Navbar />
+
+      <main className="flex-1 py-4 sm:py-8 px-2 sm:px-4 flex flex-col items-center justify-start sm:justify-center w-full">
 
       {/* Main Card Container: Edge-to-edge on mobile with ZERO border gaps */}
       <div className="w-full max-w-lg bg-white sm:rounded-2xl border-0 sm:border border-[#E9E8F0] sm:shadow-sm flex flex-col relative overflow-hidden min-h-screen sm:min-h-0">

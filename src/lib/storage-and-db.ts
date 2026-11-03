@@ -3,7 +3,7 @@ import {
   Organisation, OrganisationMember, SiteVisit, VisitorStats,
   AttendeeCrmRecord, UserCrmRecord, PlatformOverviewMetrics, DailyVisitorTrend,
   EventRegistration, RegistrationFormConfig, EventInvitation, SavedEvent,
-  UserInterest, EventPageAnalytic 
+  UserInterest, EventPageAnalytic, UserRole 
 } from '../types/database';
 import { createSampleFlyerDataUrl } from './sample-flyers';
 
@@ -113,6 +113,10 @@ export interface StoredAccount {
   full_name: string;
   org_id: string;
   org_name: string;
+  role?: UserRole;
+  account_type?: 'host' | 'attendee';
+  is_host?: boolean;
+  active_view?: 'host' | 'attendee';
   created_at: string;
 }
 
@@ -298,423 +302,82 @@ export function saveCustomSupabaseConfig(cfg: SupabaseConfig) {
 }
 
 // Clean storage initialization without any dummy user or mock data
-export async function initializeLocalData(): Promise<void> {
+export const LS_CLEAN_WIPE_KEY = 'eventra_clean_wipe_v6';
+
+export function clearAllSystemData(): void {
   try {
-    // 1. Purge legacy dummy session if pointing to demo accounts
-    const activeSessionEmail = safeLocalStorageGet(LS_AUTH_SESSION);
-    if (activeSessionEmail && (
-      activeSessionEmail.includes('alex.morgan') || 
-      activeSessionEmail.includes('organizer@eventra') ||
-      activeSessionEmail.includes('demo')
-    )) {
-      try {
-        localStorage.removeItem(LS_AUTH_SESSION);
-      } catch {}
-      memoryKvStore.delete(LS_AUTH_SESSION);
-    }
-
-    // 2. Purge legacy dummy user profile
-    const existingUserRaw = safeLocalStorageGet(LS_USER_KEY);
-    if (existingUserRaw) {
-      try {
-        const u = JSON.parse(existingUserRaw);
-        if (u.email === 'alex.morgan@eventra.io' || u.email === 'organizer@eventra.io' || u.id?.startsWith('usr_demo') || u.id === 'usr_organizer_01') {
-          try {
-            localStorage.removeItem(LS_USER_KEY);
-          } catch {}
-          memoryKvStore.delete(LS_USER_KEY);
-        }
-      } catch {}
-    }
-
-    // 3. Purge legacy dummy accounts
-    getStoredAccounts();
-
-    // 4. Purge mock demo events
-    const existingEventsRaw = safeLocalStorageGet(LS_EVENTS_KEY);
-    if (existingEventsRaw) {
-      let parsed: FlyerEvent[] = JSON.parse(existingEventsRaw);
-      const hadMockEvents = parsed.some(
-        (e) => e.id === 'ev_tech_001' || e.id === 'ev_gala_002' || e.id.startsWith('ev_demo_')
-      );
-      if (hadMockEvents) {
-        parsed = parsed.filter(
-          (e) => e.id !== 'ev_tech_001' && e.id !== 'ev_gala_002' && !e.id.startsWith('ev_demo_')
-        );
-        safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(parsed));
-      }
-
-      // Sanitize oversized data URLs in remaining real events
-      let needsSanitize = false;
-      for (const ev of parsed) {
-        if (ev.original_flyer_data_url && ev.original_flyer_data_url.length > 500) {
-          if (ev.original_flyer_path) {
-            await storeFileInIDB(ev.original_flyer_path, ev.original_flyer_data_url);
-          }
-          ev.original_flyer_data_url = '';
-          needsSanitize = true;
-        }
-      }
-      if (needsSanitize) {
-        safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(parsed));
-      }
-    }
-
-    // 5. Purge mock dummy participants & downloads
-    const existingParticipantsRaw = safeLocalStorageGet(LS_PARTICIPANTS_KEY);
-    if (existingParticipantsRaw) {
-      const parts: Participant[] = JSON.parse(existingParticipantsRaw);
-      const cleanedParts = parts.filter(
-        (p) => p.id !== 'part_001' && p.id !== 'part_002' && p.id !== 'part_003' && !p.id.startsWith('part_demo_')
-      );
-      if (cleanedParts.length !== parts.length) {
-        safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify(cleanedParts));
-      }
-    }
-
-    const existingDownloadsRaw = safeLocalStorageGet(LS_DOWNLOADS_KEY);
-    if (existingDownloadsRaw) {
-      const dls: FlyerDownload[] = JSON.parse(existingDownloadsRaw);
-      const cleanedDls = dls.filter(
-        (d) => d.id !== 'dl_001' && d.id !== 'dl_002' && d.id !== 'dl_003' && d.id !== 'dl_004'
-      );
-      if (cleanedDls.length !== dls.length) {
-        safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify(cleanedDls));
-      }
-    }
-
-    // 6. Clean up any old file_* entries from localStorage to save quota
+    localStorage.removeItem(LS_EVENTS_KEY);
+    localStorage.removeItem(LS_TEMPLATES_KEY);
+    localStorage.removeItem(LS_REGISTRATIONS_KEY);
+    localStorage.removeItem(LS_INVITATIONS_KEY);
+    localStorage.removeItem(LS_PARTICIPANTS_KEY);
+    localStorage.removeItem(LS_DOWNLOADS_KEY);
+    localStorage.removeItem(LS_SAVED_EVENTS_KEY);
+    localStorage.removeItem(LS_USER_INTERESTS_KEY);
+    localStorage.removeItem(LS_EVENT_ANALYTICS_KEY);
+    localStorage.removeItem(LS_ACCOUNTS_KEY);
+    localStorage.removeItem(LS_AUTH_SESSION);
+    localStorage.removeItem(LS_USER_KEY);
+    localStorage.removeItem(LS_ORGS_KEY);
+    localStorage.removeItem(LS_ORG_MEMBERS_KEY);
+    localStorage.removeItem(LS_CURRENT_ORG_KEY);
+    localStorage.removeItem(LS_VISITS_KEY);
+    
+    // Purge any file_* items or old dummy keys
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
-      if (k && k.startsWith('file_')) {
-        localStorage.removeItem(k);
+      if (k && (k.startsWith('file_') || k.startsWith('eventra_') || k.startsWith('temp_'))) {
+        if (k !== LS_CLEAN_WIPE_KEY && k !== LS_SUPABASE_CONFIG) {
+          localStorage.removeItem(k);
+        }
       }
     }
-  } catch (migrationErr) {
-    console.warn('[Eventra Storage] Storage auto-migration non-fatal notice:', migrationErr);
+  } catch {}
+  memoryFileStore.clear();
+  memoryKvStore.clear();
+
+  // Initialize empty baseline collections (100% clean, no demo/mock data)
+  safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify([]));
+  safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify([]));
+  safeLocalStorageSet(LS_REGISTRATIONS_KEY, JSON.stringify([]));
+  safeLocalStorageSet(LS_INVITATIONS_KEY, JSON.stringify([]));
+  safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify([]));
+  safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify([]));
+  safeLocalStorageSet(LS_SAVED_EVENTS_KEY, JSON.stringify([]));
+  safeLocalStorageSet(LS_USER_INTERESTS_KEY, JSON.stringify([]));
+  safeLocalStorageSet(LS_EVENT_ANALYTICS_KEY, JSON.stringify([]));
+  safeLocalStorageSet(LS_FORM_CONFIGS_KEY, JSON.stringify([]));
+  safeLocalStorageSet(LS_ACCOUNTS_KEY, JSON.stringify([]));
+  safeLocalStorageSet(LS_VISITS_KEY, JSON.stringify([]));
+  safeLocalStorageSet(LS_CLEAN_WIPE_KEY, 'true');
+}
+
+export async function initializeLocalData(): Promise<void> {
+  // Check if system wipe was executed
+  const isWiped = safeLocalStorageGet(LS_CLEAN_WIPE_KEY);
+  if (!isWiped) {
+    clearAllSystemData();
+    return;
   }
 
-  // 7. Initial clean empty collections for live operation (NO dummy user or events)
-  // 7. Ensure Worship Expression 4.0 event is seeded with high-res artwork & exact coordinates
-  const eventsRaw = safeLocalStorageGet(LS_EVENTS_KEY);
-  let eventsList: FlyerEvent[] = eventsRaw ? JSON.parse(eventsRaw) : [];
-  const worshipEv = eventsList.find((e) => e.slug === 'worship-expression-40' || e.slug === 'worship-experience-40');
-  
-  if (!worshipEv) {
-    const evId = 'ev_worship_expression_40';
-    const liveEvent: FlyerEvent = {
-      id: evId,
-      user_id: 'usr_organizer_main',
-      org_id: 'org_main',
-      event_name: 'Worship Expression 4.0',
-      title: 'Worship Expression 4.0',
-      slug: 'worship-expression-40',
-      description: 'An evening of profound praise, live orchestra, and deep spiritual communion themed "When Our Hearts Speak". Join ministers, delegates, and families from across the region for an unforgettable night of uplifting music and renewal.',
-      original_flyer_path: '/assets/aistudio/IMG_2529_74b7441a.jpeg',
-      original_flyer_data_url: '',
-      cover_image_url: '/assets/aistudio/IMG_2529_74b7441a.jpeg',
-      category: 'Religion and Faith',
-      venue: 'Pilgrims House of the Word Auditorium',
-      address: '177 Aka Road, Opp. IBB IL',
-      city: 'Uyo',
-      country: 'Nigeria',
-      event_type: 'physical',
-      event_date: 'November 15, 2026',
-      start_time: '5:00 PM',
-      end_time: '9:30 PM',
-      timezone: 'WAT (UTC+1)',
-      status: 'published',
-      visibility: 'public',
-      registration_status: 'open',
-      capacity: 500,
-      is_featured: true,
-      organiser_name: 'Pilgrims Pentecostal Ministries',
-      organiser_email: 'events@pilgrimsministries.org',
-      organiser_contact: '+234 803 123 4567',
-      event_website: 'https://pilgrimsministries.org',
-      schedule: [
-        { time: '4:30 PM', title: 'Red Carpet & Guest Welcoming', description: 'Photo reception and official attendee flyer check-in.' },
-        { time: '5:00 PM', title: 'Opening Procession & Choral Introit', description: 'Mass choir and live symphony ensemble opening.' },
-        { time: '6:15 PM', title: 'Keynote Exhortation & Ministrations', description: 'Special guest ministrations with live orchestra.' },
-        { time: '8:30 PM', title: 'Free Medical Outreach & Community Blessing', description: 'On-site medical consultations and welfare presentation.' },
-      ],
-      faqs: [
-        { question: 'Is attendance completely free?', answer: 'Yes! Admission is free, but registration or RSVP is strongly encouraged for reserved auditorium seating.' },
-        { question: 'Can I get a personalized attendance flyer?', answer: 'Yes, click the "Personalised Flyer" link on this page to create your official branded attendee flyer in seconds.' },
-        { question: 'Is parking available?', answer: 'Secure on-site parking is available at the venue with traffic wardens on duty.' },
-      ],
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    eventsList.unshift(liveEvent);
-
-    // Additional Stage 1 Discovery Marketplace events
-    const techEvent: FlyerEvent = {
-      id: 'ev_tech_summit_2026',
-      user_id: 'usr_organizer_main',
-      org_id: 'org_main',
-      event_name: 'Next Horizon AI & Cloud Summit 2026',
-      title: 'Next Horizon AI & Cloud Summit 2026',
-      slug: 'next-horizon-2026',
-      description: 'The premier gathering for software architects, AI researchers, and cloud leaders exploring next-generation generative models, distributed infrastructure, and production engineering.',
-      original_flyer_path: createSampleFlyerDataUrl('tech'),
-      cover_image_url: createSampleFlyerDataUrl('tech'),
-      category: 'Technology',
-      venue: 'Moscone Center, South Hall',
-      address: '747 Howard St',
-      city: 'San Francisco',
-      country: 'United States',
-      event_type: 'hybrid',
-      online_url: 'https://stream.nexthorizon2026.io',
-      event_date: 'November 14-16, 2026',
-      start_time: '9:00 AM',
-      end_time: '6:00 PM',
-      timezone: 'PST (UTC-8)',
-      status: 'published',
-      visibility: 'public',
-      registration_status: 'open',
-      capacity: 1200,
-      is_featured: true,
-      organiser_name: 'Horizon Tech Foundation',
-      organiser_email: 'summit@nexthorizon2026.io',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    eventsList.push(techEvent);
-
-    const lagosCreative: FlyerEvent = {
-      id: 'ev_lagos_creative_2026',
-      user_id: 'usr_organizer_main',
-      org_id: 'org_main',
-      event_name: 'Pulse Live African Creative & Design Expo',
-      title: 'Pulse Live African Creative & Design Expo',
-      slug: 'pulse-live-lagos',
-      description: 'Three stages of design masterclasses, film showcases, interactive media installations, and live music celebrating African creativity and digital innovation.',
-      original_flyer_path: createSampleFlyerDataUrl('music'),
-      cover_image_url: createSampleFlyerDataUrl('music'),
-      category: 'Music',
-      venue: 'Landmark Beach & Event Centre',
-      address: 'Water Corporation Drive, Victoria Island',
-      city: 'Lagos',
-      country: 'Nigeria',
-      event_type: 'physical',
-      event_date: 'December 5, 2026',
-      start_time: '12:00 PM',
-      end_time: '11:00 PM',
-      timezone: 'WAT (UTC+1)',
-      status: 'published',
-      visibility: 'public',
-      registration_status: 'open',
-      capacity: 800,
-      is_featured: true,
-      organiser_name: 'Pulse Media Group',
-      organiser_email: 'hello@pulselive.africa',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    eventsList.push(lagosCreative);
-
-    const londonSummit: FlyerEvent = {
-      id: 'ev_london_leadership_2026',
-      user_id: 'usr_organizer_main',
-      org_id: 'org_main',
-      event_name: 'Global Enterprise Leadership Forum',
-      title: 'Global Enterprise Leadership Forum',
-      slug: 'global-leadership-forum-london',
-      description: 'Executive summit bringing together founders, corporate directors, and scale-up operators to discuss governance, capital allocation, and sustainable growth in modern markets.',
-      original_flyer_path: createSampleFlyerDataUrl('tech'),
-      cover_image_url: createSampleFlyerDataUrl('tech'),
-      category: 'Business',
-      venue: 'ExCeL London International Centre',
-      address: 'Royal Victoria Dock, 1 Western Gateway',
-      city: 'London',
-      country: 'United Kingdom',
-      event_type: 'physical',
-      event_date: 'November 28, 2026',
-      start_time: '10:00 AM',
-      end_time: '5:00 PM',
-      timezone: 'GMT (UTC+0)',
-      status: 'published',
-      visibility: 'public',
-      registration_status: 'open',
-      capacity: 450,
-      is_featured: false,
-      organiser_name: 'Global Leadership Institute',
-      organiser_email: 'register@leadershipsummit.org.uk',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    eventsList.push(londonSummit);
-
-    const onlineWorkshop: FlyerEvent = {
-      id: 'ev_online_distributed_systems',
-      user_id: 'usr_organizer_main',
-      org_id: 'org_main',
-      event_name: 'Modern Distributed Systems Architecture Masterclass',
-      title: 'Modern Distributed Systems Architecture Masterclass',
-      slug: 'distributed-systems-masterclass',
-      description: 'Hands-on interactive masterclass covering high-throughput event sourcing, CQRS patterns, and resilient consensus mechanisms in modern production backends.',
-      original_flyer_path: createSampleFlyerDataUrl('tech'),
-      cover_image_url: createSampleFlyerDataUrl('tech'),
-      category: 'Workshops',
-      venue: 'Virtual Classroom (Zoom & Discord)',
-      city: 'Online',
-      country: 'Online',
-      event_type: 'online',
-      online_url: 'https://zoom.us/j/eventra-workshop',
-      event_date: 'November 20, 2026',
-      start_time: '2:00 PM',
-      end_time: '5:30 PM',
-      timezone: 'UTC',
-      status: 'published',
-      visibility: 'public',
-      registration_status: 'open',
-      capacity: 300,
-      is_featured: false,
-      organiser_name: 'Eventra Engineering Academy',
-      organiser_email: 'academy@eventra.io',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    eventsList.push(onlineWorkshop);
-
-    safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(eventsList));
-
-    const templatesRaw = safeLocalStorageGet(LS_TEMPLATES_KEY);
-    const tmplList: FlyerTemplate[] = templatesRaw ? JSON.parse(templatesRaw) : [];
-    const exactTemplate: FlyerTemplate = {
-      id: `tmpl_${evId}`,
-      event_id: evId,
-      photo_x: 0.31,
-      photo_y: 0.344,
-      photo_width: 0.38,
-      photo_height: 0.38,
-      photo_shape: 'circle',
-      photo_crop_settings: { zoom: 1.0 },
-      name_x: 0.28,
-      name_y: 0.718,
-      name_width: 0.44,
-      name_height: 0.048,
-      font_family: 'Plus Jakarta Sans, sans-serif',
-      font_size: 44,
-      font_weight: '800',
-      text_color: '#111126',
-      text_alignment: 'center',
-      max_lines: 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    tmplList.push(exactTemplate);
-    safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify(tmplList));
-
-    // Seed initial registrations for Worship Expression
-    const initialRegistrations: EventRegistration[] = [
-      {
-        id: 'reg_demo_01',
-        event_id: evId,
-        first_name: 'Marvelous',
-        last_name: 'Ndukwe',
-        email: 'marvelousndukwe1570@gmail.com',
-        phone: '+234 801 234 5678',
-        registration_reference: 'EVT-WRP01',
-        status: 'confirmed',
-        created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-        updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-      },
-      {
-        id: 'reg_demo_02',
-        event_id: evId,
-        first_name: 'John',
-        last_name: 'Amah',
-        email: 'john.amah@example.com',
-        phone: '+234 802 345 6789',
-        registration_reference: 'EVT-WRP02',
-        status: 'confirmed',
-        created_at: new Date(Date.now() - 86400000).toISOString(),
-        updated_at: new Date(Date.now() - 86400000).toISOString(),
-      },
-      {
-        id: 'reg_demo_03',
-        event_id: evId,
-        first_name: 'Sarah',
-        last_name: 'Jenkins',
-        email: 'sarah.j@example.com',
-        registration_reference: 'EVT-WRP03',
-        status: 'confirmed',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    ];
-    safeLocalStorageSet(LS_REGISTRATIONS_KEY, JSON.stringify(initialRegistrations));
-
-    // Seed initial digital invitations (Eventra Invite)
-    const initialInvitations: EventInvitation[] = [
-      {
-        id: 'inv_demo_01',
-        event_id: evId,
-        invited_name: 'Pastor Emmanuel Bassey',
-        invited_email: 'emmanuel.bassey@faithcommunity.org',
-        invitation_token: 'worship-vip-pastor-bassey',
-        message: 'Dear Pastor Bassey, we are deeply honored to invite you as our special guest to Worship Expression 4.0.',
-        status: 'accepted',
-        rsvp_response: 'accepted',
-        guest_count: 2,
-        rsvp_deadline: 'November 10, 2026',
-        created_by: 'usr_organizer_main',
-        created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-        updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-      },
-      {
-        id: 'inv_demo_02',
-        event_id: evId,
-        invited_name: 'Dr. Stella Okon',
-        invited_email: 'stella.okon@medoutreach.org',
-        invitation_token: 'worship-guest-stella-okon',
-        message: 'Dr. Okon, thank you for partnering with us for the Free Medical Outreach at Worship Expression 4.0.',
-        status: 'accepted',
-        rsvp_response: 'accepted',
-        guest_count: 1,
-        rsvp_deadline: 'November 10, 2026',
-        created_by: 'usr_organizer_main',
-        created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-        updated_at: new Date(Date.now() - 86400000).toISOString(),
-      },
-    ];
-    safeLocalStorageSet(LS_INVITATIONS_KEY, JSON.stringify(initialInvitations));
-  } else {
-    // Sanitize existing template to ensure circle Y and name coordinates are exact without frameScale
-    const templatesRaw = safeLocalStorageGet(LS_TEMPLATES_KEY);
-    const tmplList: FlyerTemplate[] = templatesRaw ? JSON.parse(templatesRaw) : [];
-    const tIdx = tmplList.findIndex((t) => t.event_id === worshipEv.id);
-    if (tIdx >= 0) {
-      tmplList[tIdx] = {
-        ...tmplList[tIdx],
-        photo_x: 0.31,
-        photo_y: 0.344,
-        photo_width: 0.38,
-        photo_height: 0.38,
-        photo_shape: 'circle',
-        photo_crop_settings: { zoom: 1.0 },
-        name_x: 0.28,
-        name_y: 0.718,
-        name_width: 0.44,
-        name_height: 0.048,
-        text_color: '#111126',
-        font_weight: '800',
-      };
-      safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify(tmplList));
-    }
+  // Ensure collections exist as clean arrays with zero mock items
+  if (!safeLocalStorageGet(LS_EVENTS_KEY)) {
+    safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify([]));
   }
-
-  // Ensure collections exist
+  if (!safeLocalStorageGet(LS_TEMPLATES_KEY)) {
+    safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify([]));
+  }
   if (!safeLocalStorageGet(LS_REGISTRATIONS_KEY)) {
     safeLocalStorageSet(LS_REGISTRATIONS_KEY, JSON.stringify([]));
   }
   if (!safeLocalStorageGet(LS_INVITATIONS_KEY)) {
     safeLocalStorageSet(LS_INVITATIONS_KEY, JSON.stringify([]));
   }
-  if (!safeLocalStorageGet(LS_FORM_CONFIGS_KEY)) {
-    safeLocalStorageSet(LS_FORM_CONFIGS_KEY, JSON.stringify([]));
+  if (!safeLocalStorageGet(LS_PARTICIPANTS_KEY)) {
+    safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify([]));
+  }
+  if (!safeLocalStorageGet(LS_DOWNLOADS_KEY)) {
+    safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify([]));
   }
   if (!safeLocalStorageGet(LS_SAVED_EVENTS_KEY)) {
     safeLocalStorageSet(LS_SAVED_EVENTS_KEY, JSON.stringify([]));
@@ -724,6 +387,9 @@ export async function initializeLocalData(): Promise<void> {
   }
   if (!safeLocalStorageGet(LS_EVENT_ANALYTICS_KEY)) {
     safeLocalStorageSet(LS_EVENT_ANALYTICS_KEY, JSON.stringify([]));
+  }
+  if (!safeLocalStorageGet(LS_FORM_CONFIGS_KEY)) {
+    safeLocalStorageSet(LS_FORM_CONFIGS_KEY, JSON.stringify([]));
   }
 }
 
@@ -748,7 +414,58 @@ export const db = {
     if (!current) return null;
     const updated = { ...current, ...updates };
     safeLocalStorageSet(LS_USER_KEY, JSON.stringify(updated));
+
+    // Sync to stored accounts
+    const accounts = getStoredAccounts();
+    const accIdx = accounts.findIndex((a) => a.id === updated.id || a.email.toLowerCase() === updated.email.toLowerCase());
+    if (accIdx >= 0) {
+      accounts[accIdx] = {
+        ...accounts[accIdx],
+        full_name: updated.full_name || accounts[accIdx].full_name,
+        account_type: updated.account_type || accounts[accIdx].account_type,
+        is_host: updated.is_host !== undefined ? updated.is_host : accounts[accIdx].is_host,
+        active_view: updated.active_view || accounts[accIdx].active_view,
+      };
+      safeLocalStorageSet(LS_ACCOUNTS_KEY, JSON.stringify(accounts));
+    }
     return updated;
+  },
+
+  upgradeUserToHost(orgName?: string): { profile: Profile; organisation: Organisation } | null {
+    const current = this.getCurrentProfile();
+    if (!current) return null;
+
+    const orgs = this.getOrganisations();
+    let userOrg = orgs.find((o) => o.owner_id === current.id || o.id === current.current_org_id);
+
+    if (!userOrg) {
+      const brandName = orgName?.trim() || `${current.full_name || 'My'}'s Events`;
+      const newOrgId = `org_${Date.now()}`;
+      userOrg = {
+        id: newOrgId,
+        name: brandName,
+        slug: brandName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'workspace',
+        owner_id: current.id,
+        plan: 'professional',
+        created_at: new Date().toISOString(),
+      };
+      this.saveOrganisation(userOrg);
+    }
+
+    const updatedProfile: Profile = {
+      ...current,
+      role: 'organisation_owner',
+      is_host: true,
+      active_view: 'host',
+      current_org_id: userOrg.id,
+    };
+    this.updateProfile(updatedProfile);
+
+    return { profile: updatedProfile, organisation: userOrg };
+  },
+
+  switchUserActiveView(activeView: 'host' | 'attendee'): Profile | null {
+    return this.updateProfile({ active_view: activeView });
   },
 
   getOrganisations(): Organisation[] {
@@ -1177,34 +894,21 @@ export const db = {
   },
 
   seedDemoVisits(): void {
-    const sampleVisits: SiteVisit[] = [];
-    const devices: ('desktop' | 'mobile' | 'tablet')[] = ['mobile', 'mobile', 'desktop', 'mobile', 'desktop', 'tablet'];
-    const paths = ['/', '/e/worship-expression-40', '/', '/login', '/register', '/e/worship-expression-40'];
-    const now = Date.now();
-
-    for (let i = 0; i < 48; i++) {
-      const hoursAgo = Math.floor(Math.random() * 140);
-      const time = new Date(now - hoursAgo * 3600 * 1000);
-      const visitorNum = Math.floor(Math.random() * 20) + 1;
-      sampleVisits.push({
-        id: `vis_demo_${Date.now()}_${i}`,
-        visitor_id: `vis_anon_${visitorNum}`,
-        path: paths[i % paths.length],
-        event_slug: paths[i % paths.length].includes('/e/') ? 'worship-expression-40' : undefined,
-        referrer: i % 3 === 0 ? 'https://instagram.com' : i % 5 === 0 ? 'https://whatsapp.com' : undefined,
-        device_type: devices[i % devices.length],
-        browser: 'Mobile Safari',
-        timestamp: time.toISOString(),
-      });
-    }
-
-    safeLocalStorageSet(LS_VISITS_KEY, JSON.stringify(sampleVisits));
+    // Left empty: visitor logging is now strictly live and real
+    safeLocalStorageSet(LS_VISITS_KEY, JSON.stringify([]));
   },
 
   purgeDummyData(): { removedEvents: number; removedParticipants: number } {
     const events = this.getEvents();
     const realEvents = events.filter(
-      (e) => e.id !== 'ev_tech_001' && e.id !== 'ev_gala_002' && !e.id.startsWith('ev_demo_')
+      (e) => e.id !== 'ev_tech_001' && 
+             e.id !== 'ev_gala_002' && 
+             e.id !== 'ev_worship_expression_40' &&
+             e.id !== 'ev_tech_summit_2026' &&
+             e.id !== 'ev_lagos_creative_2026' &&
+             e.id !== 'ev_london_leadership_2026' &&
+             e.id !== 'ev_online_distributed_systems' &&
+             !e.id.startsWith('ev_demo_')
     );
     const removedEvents = events.length - realEvents.length;
     safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(realEvents));

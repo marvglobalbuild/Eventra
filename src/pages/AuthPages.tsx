@@ -5,7 +5,8 @@ import { db } from '../lib/storage-and-db';
 import { EventraLogo } from '../components/EventraLogo';
 import { 
   Loader2, AlertCircle, Eye, EyeOff, 
-  ArrowLeft, Building, Mail, Lock, User
+  ArrowLeft, Building, Mail, Lock, User,
+  Compass, Calendar, CheckCircle2, Sparkles
 } from 'lucide-react';
 
 export const Login: React.FC = () => {
@@ -25,6 +26,7 @@ const AuthContainer: React.FC<AuthContainerProps> = ({ initialMode }) => {
   const { signIn, signUp } = useAuth();
 
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
+  const [accountType, setAccountType] = useState<'attendee' | 'host'>('attendee');
   const [fullName, setFullName] = useState('');
   const [orgName, setOrgName] = useState('');
   const [email, setEmail] = useState('');
@@ -51,7 +53,7 @@ const AuthContainer: React.FC<AuthContainerProps> = ({ initialMode }) => {
         navigate('/dashboard');
       }
     } else {
-      const res = await signUp(email, password, fullName, orgName);
+      const res = await signUp(email, password, fullName, accountType, orgName);
       if (!res.success) {
         setError(res.error || 'Failed to create your account.');
         setLoading(false);
@@ -69,12 +71,12 @@ const AuthContainer: React.FC<AuthContainerProps> = ({ initialMode }) => {
           <EventraLogo variant="with-tagline" size="lg" />
         </Link>
         <h2 className="mt-6 text-xl sm:text-2xl font-extrabold text-[#111126] tracking-tight">
-          {mode === 'signin' ? 'Sign in to your Workspace' : 'Create your Eventra Account'}
+          {mode === 'signin' ? 'Sign in to Eventra' : 'Create your Eventra Account'}
         </h2>
-        <p className="text-xs text-[#73738A] mt-1.5 max-w-xs">
+        <p className="text-xs text-[#73738A] mt-1.5 max-w-sm">
           {mode === 'signin' 
-            ? 'Sign in to access your dashboard, monitor flyer downloads, and view participant registrations.'
-            : 'Register your workspace to upload flyer designs and generate personalised attendee links.'
+            ? 'Sign in to access your dashboard, discover events, manage registrations, or create flyers.'
+            : 'Join Eventra to discover inspiring events or create and host exceptional experiences.'
           }
         </p>
       </div>
@@ -89,7 +91,7 @@ const AuthContainer: React.FC<AuthContainerProps> = ({ initialMode }) => {
                 setMode('signin');
                 setError(null);
               }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
                 mode === 'signin'
                   ? 'bg-white text-[#111126] shadow-xs'
                   : 'text-[#73738A] hover:text-[#111126]'
@@ -103,7 +105,7 @@ const AuthContainer: React.FC<AuthContainerProps> = ({ initialMode }) => {
                 setMode('signup');
                 setError(null);
               }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
                 mode === 'signup'
                   ? 'bg-white text-[#111126] shadow-xs'
                   : 'text-[#73738A] hover:text-[#111126]'
@@ -123,6 +125,71 @@ const AuthContainer: React.FC<AuthContainerProps> = ({ initialMode }) => {
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'signup' && (
               <>
+                {/* Clear Account Type Selection */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-[11px] font-bold text-[#73738A] uppercase tracking-wider">
+                      Account Type
+                    </label>
+                    <span className="text-[10px] text-[#6425E8] font-semibold">
+                      Switch or upgrade anytime
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
+                    {/* Option: Attendee */}
+                    <button
+                      type="button"
+                      onClick={() => setAccountType('attendee')}
+                      className={`p-3 rounded-xl border text-left transition relative cursor-pointer ${
+                        accountType === 'attendee'
+                          ? 'border-[#6425E8] bg-[#6425E8]/5 ring-2 ring-[#6425E8]/20'
+                          : 'border-[#E9E8F0] hover:border-[#D1D0DE] bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                          accountType === 'attendee' ? 'bg-[#6425E8] text-white' : 'bg-[#F0EEFB] text-[#6425E8]'
+                        }`}>
+                          <Compass className="w-3.5 h-3.5" />
+                        </div>
+                        {accountType === 'attendee' && (
+                          <CheckCircle2 className="w-4 h-4 text-[#6425E8]" />
+                        )}
+                      </div>
+                      <p className="font-bold text-xs text-[#111126]">Attendee</p>
+                      <p className="text-[10px] text-[#73738A] mt-0.5 leading-snug">
+                        Discover events, register for tickets & personalize flyers.
+                      </p>
+                    </button>
+
+                    {/* Option: Host */}
+                    <button
+                      type="button"
+                      onClick={() => setAccountType('host')}
+                      className={`p-3 rounded-xl border text-left transition relative cursor-pointer ${
+                        accountType === 'host'
+                          ? 'border-[#6425E8] bg-[#6425E8]/5 ring-2 ring-[#6425E8]/20'
+                          : 'border-[#E9E8F0] hover:border-[#D1D0DE] bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                          accountType === 'host' ? 'bg-[#6425E8] text-white' : 'bg-[#F0EEFB] text-[#6425E8]'
+                        }`}>
+                          <Calendar className="w-3.5 h-3.5" />
+                        </div>
+                        {accountType === 'host' && (
+                          <CheckCircle2 className="w-4 h-4 text-[#6425E8]" />
+                        )}
+                      </div>
+                      <p className="font-bold text-xs text-[#111126]">Host</p>
+                      <p className="text-[10px] text-[#73738A] mt-0.5 leading-snug">
+                        Create events, invite guests & design flyers with Eventra Create.
+                      </p>
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-[11px] font-bold text-[#73738A] uppercase tracking-wider mb-1.5">
                     Your Full Name
@@ -140,21 +207,23 @@ const AuthContainer: React.FC<AuthContainerProps> = ({ initialMode }) => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-[#73738A] uppercase tracking-wider mb-1.5">
-                    Organisation / Brand Name
-                  </label>
-                  <div className="relative">
-                    <Building className="w-4 h-4 text-gray-400 absolute left-3.5 top-3 pointer-events-none" />
-                    <input
-                      type="text"
-                      placeholder="e.g. Pilgrims Pentecostal Ministries"
-                      value={orgName}
-                      onChange={(e) => setOrgName(e.target.value)}
-                      className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-[#E9E8F0] rounded-xl text-xs text-[#111126] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition"
-                    />
+                {accountType === 'host' && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#73738A] uppercase tracking-wider mb-1.5">
+                      Organisation / Brand Name
+                    </label>
+                    <div className="relative">
+                      <Building className="w-4 h-4 text-gray-400 absolute left-3.5 top-3 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="e.g. Pilgrims Pentecostal Ministries"
+                        value={orgName}
+                        onChange={(e) => setOrgName(e.target.value)}
+                        className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-[#E9E8F0] rounded-xl text-xs text-[#111126] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </>
             )}
 

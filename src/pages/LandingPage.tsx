@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import confetti from 'canvas-confetti';
 import { 
-  ArrowRight, Upload, MousePointerClick, Download, 
-  Share2, ShieldCheck, CheckCircle2, Check, Zap, Layers, RefreshCw, Eye,
-  Compass, Ticket, QrCode, Image as ImageIcon, Send, Users, ChevronRight,
-  Building2, Menu, X, Play, Sparkles
+  ArrowRight, Download, 
+  Share2, ShieldCheck, CheckCircle2, Check, Zap, Layers,
+  Compass, Ticket, Send, Users, ChevronRight, QrCode, Image as ImageIcon,
+  Menu, X, Sparkles
 } from 'lucide-react';
 
+import { Navbar } from '../components/Navbar';
 import { EventraLogo, EventraLogoSymbol } from '../components/EventraLogo';
 import { useAuth } from '../context/AuthContext';
 import { PLATFORM_MODULES } from '../lib/modules';
@@ -18,67 +18,13 @@ import { db } from '../lib/storage-and-db';
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [demoStep, setDemoStep] = useState<'original' | 'upload' | 'completed'>('completed');
 
   useEffect(() => {
     db.recordVisit('/');
   }, []);
   
-  // Interactive live demo states
-  const [demoName, setDemoName] = useState('Elena Rostova');
-  const [demoAvatar, setDemoAvatar] = useState<'elena' | 'marcus' | 'sarah'>('elena');
-  const [demoRole, setDemoRole] = useState('Confirmed Speaker');
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
-  
   // Modal state for platform vision preview
   const [selectedModule, setSelectedModule] = useState<FeatureModule | null>(null);
-
-  const avatarPresets = {
-    elena: {
-      initials: 'ER',
-      name: 'Elena Rostova',
-      gradient: 'from-[#6425E8] to-[#9638F5]',
-      border: 'border-purple-300',
-    },
-    marcus: {
-      initials: 'MC',
-      name: 'Marcus Chen',
-      gradient: 'from-[#0284C7] to-[#38BDF8]',
-      border: 'border-sky-300',
-    },
-    sarah: {
-      initials: 'ST',
-      name: 'Sarah Taylor',
-      gradient: 'from-[#D946EF] to-[#F43F5E]',
-      border: 'border-pink-300',
-    },
-  };
-
-  const handleGenerateDemo = () => {
-    setDemoStep('completed');
-    try {
-      confetti({
-        particleCount: 40,
-        spread: 60,
-        origin: { y: 0.65 },
-        colors: ['#6425E8', '#9638F5', '#38BDF8', '#10B981'],
-      });
-    } catch {}
-  };
-
-  const handleDownloadDemo = () => {
-    setDownloadSuccess(true);
-    try {
-      confetti({
-        particleCount: 55,
-        spread: 75,
-        origin: { y: 0.65 },
-        colors: ['#6425E8', '#10B981', '#F59E0B', '#EC4899'],
-      });
-    } catch {}
-    setTimeout(() => setDownloadSuccess(false), 3000);
-  };
 
   const openModulePreview = (moduleKey: string) => {
     const mod = PLATFORM_MODULES.find((m) => m.module_key === moduleKey);
@@ -87,122 +33,8 @@ export const LandingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#F8F8FC] text-[#111126] flex flex-col font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8]">
-      {/* Top Bar: Full-width sticky header with entrance animation and glass blur */}
-      <header className="sticky top-0 z-40 w-full bg-[#F8F8FC]/90 backdrop-blur-md border-b border-[#E9E8F0]/80 animate-fade-in-down">
-        <div className="h-20 max-w-6xl w-full mx-auto px-4 sm:px-6 flex items-center justify-between gap-4">
-          {/* Zone 1: Wordmark */}
-          <Link to="/" className="whitespace-nowrap shrink-0 hover:opacity-90 transition">
-            <EventraLogo variant="with-tagline" size="md" />
-          </Link>
-
-          {/* Zone 2: Nav Links (Desktop) */}
-          <nav className="hidden md:flex items-center gap-7 text-sm font-semibold text-[#5A5A72]">
-            <Link to="/discover" className="text-[#6425E8] hover:text-[#4214B8] font-bold transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5">
-              <Compass className="w-4 h-4 text-[#6425E8]" />
-              <span>Discover Events</span>
-            </Link>
-            <a href="#eventra-create" className="hover:text-[#6425E8] transition-colors whitespace-nowrap shrink-0">
-              Eventra Create
-            </a>
-            <a href="#roadmap" className="hover:text-[#6425E8] transition-colors whitespace-nowrap shrink-0">
-              Platform Modules
-            </a>
-            <a href="#how-it-works" className="hover:text-[#6425E8] transition-colors whitespace-nowrap shrink-0">
-              How It Works
-            </a>
-          </nav>
-
-          {/* Zone 3: 1 Primary Action + Mobile Hamburger */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {user ? (
-              <Link
-                to="/dashboard"
-                className="interactive-btn px-4 py-2 text-sm font-semibold text-white bg-[#6425E8] hover:bg-[#4214B8] rounded-xl shadow-xs transition whitespace-nowrap shrink-0 flex items-center space-x-1.5"
-              >
-                <span>Go to Workspace</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            ) : (
-              <div className="flex items-center gap-2 sm:gap-3">
-                <Link
-                  to="/login"
-                  className="hidden sm:inline text-sm font-semibold text-[#5A5A72] hover:text-[#111126] transition whitespace-nowrap px-2 py-1"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  to="/register"
-                  className="interactive-btn px-4 py-2 text-sm font-semibold text-white bg-[#6425E8] hover:bg-[#4214B8] rounded-xl shadow-xs transition whitespace-nowrap shrink-0"
-                >
-                  Get Started
-                </Link>
-              </div>
-            )}
-
-            {/* Hamburger Button for Mobile */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 text-[#5A5A72] hover:text-[#111126] hover:bg-white rounded-xl border border-[#E9E8F0] transition"
-              aria-label="Toggle navigation menu"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile Dropdown Menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden bg-white border-t border-[#E9E8F0] px-6 py-4 space-y-3 shadow-lg animate-in slide-in-from-top-2 duration-150">
-            <Link
-              to="/discover"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block text-sm font-bold text-[#6425E8] py-2 flex items-center gap-2"
-            >
-              <Compass className="w-4 h-4 text-[#6425E8]" />
-              <span>Discover Events Marketplace</span>
-            </Link>
-            <a
-              href="#eventra-create"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block text-sm font-semibold text-[#5A5A72] hover:text-[#6425E8] py-2"
-            >
-              Eventra Create (Flyer Studio)
-            </a>
-            <a
-              href="#roadmap"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block text-sm font-semibold text-[#5A5A72] hover:text-[#6425E8] py-2"
-            >
-              Platform Vision
-            </a>
-            <a
-              href="#how-it-works"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block text-sm font-semibold text-[#5A5A72] hover:text-[#6425E8] py-2"
-            >
-              How It Works
-            </a>
-            {!user && (
-              <div className="pt-2 border-t border-[#E9E8F0] flex items-center justify-between">
-                <Link
-                  to="/login"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="text-sm font-semibold text-[#5A5A72] hover:text-[#111126]"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  to="/register"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="px-4 py-2 bg-[#6425E8] text-white text-sm font-semibold rounded-xl"
-                >
-                  Get Started
-                </Link>
-              </div>
-            )}
-          </div>
-        )}
-      </header>
+      {/* Unified Eventra Top Header / Navbar */}
+      <Navbar />
 
       {/* Hero Section with Ambient Lighting & Staggered Entrance Animations */}
       <main className="flex-1 max-w-5xl mx-auto px-4 sm:px-6 pt-14 sm:pt-18 lg:pt-20 pb-20 sm:pb-24 text-center relative">
@@ -248,33 +80,62 @@ export const LandingPage: React.FC = () => {
           Create, promote, and elevate your events with a smarter self-service platform designed for organizers and participants who love clean, instant flyers.
         </p>
 
-        {/* Interactive CTAs with entrance animation */}
+        {/* Primary User Journey CTAs */}
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3.5 animate-fade-in-up delay-250">
-          <Link
-            to="/discover"
-            className="interactive-btn group relative overflow-hidden w-full sm:w-auto px-7 py-3.5 bg-[#6425E8] hover:bg-[#4214B8] text-white font-semibold text-sm rounded-xl shadow-md hover:shadow-lg hover:shadow-[#6425E8]/25 transition-all flex items-center justify-center space-x-2"
-          >
-            <Compass className="w-4 h-4" />
-            <span>Discover Events</span>
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </Link>
-          <Link
-            to="/create-event"
-            className="interactive-btn w-full sm:w-auto px-6 py-3.5 bg-[#111126] hover:bg-black text-white font-semibold text-sm rounded-xl transition shadow-xs flex items-center justify-center space-x-2"
-          >
-            <span>Create an Event</span>
-          </Link>
-          <Link
-            to="/e/worship-expression-40"
-            className="interactive-btn w-full sm:w-auto px-6 py-3.5 bg-white border border-[#E9E8F0] hover:border-[#6425E8]/50 text-[#111126] font-semibold text-sm rounded-xl hover:bg-[#F8F8FC] transition shadow-xs flex items-center justify-center space-x-2 group"
-          >
-            <Sparkles className="w-4 h-4 text-[#6425E8]" />
-            <span>Generate Live Attendee Flyer</span>
-          </Link>
+          {user ? (
+            <>
+              <Link
+                to="/dashboard"
+                className="interactive-btn group relative overflow-hidden w-full sm:w-auto px-7 py-3.5 bg-[#6425E8] hover:bg-[#4214B8] text-white font-semibold text-sm rounded-xl shadow-md hover:shadow-lg hover:shadow-[#6425E8]/25 transition-all flex items-center justify-center space-x-2"
+              >
+                <span>Go to Workspace</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </Link>
+              <Link
+                to="/create-event"
+                className="interactive-btn w-full sm:w-auto px-6 py-3.5 bg-[#111126] hover:bg-black text-white font-semibold text-sm rounded-xl transition shadow-xs flex items-center justify-center space-x-2"
+              >
+                <Sparkles className="w-4 h-4 text-[#9638F5]" />
+                <span>Create an Event</span>
+              </Link>
+              <Link
+                to="/discover"
+                className="interactive-btn w-full sm:w-auto px-6 py-3.5 bg-white border border-[#E9E8F0] hover:border-[#6425E8]/50 text-[#111126] font-semibold text-sm rounded-xl hover:bg-[#F8F8FC] transition shadow-xs flex items-center justify-center space-x-2"
+              >
+                <Compass className="w-4 h-4 text-[#6425E8]" />
+                <span>Discover Events</span>
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                to="/register?type=host"
+                className="interactive-btn group relative overflow-hidden w-full sm:w-auto px-7 py-3.5 bg-[#6425E8] hover:bg-[#4214B8] text-white font-semibold text-sm rounded-xl shadow-md hover:shadow-lg hover:shadow-[#6425E8]/25 transition-all flex items-center justify-center space-x-2"
+              >
+                <Sparkles className="w-4 h-4 text-purple-200" />
+                <span>Register as a Host</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </Link>
+              <Link
+                to="/discover"
+                className="interactive-btn w-full sm:w-auto px-6 py-3.5 bg-[#111126] hover:bg-black text-white font-semibold text-sm rounded-xl transition shadow-xs flex items-center justify-center space-x-2"
+              >
+                <Compass className="w-4 h-4 text-purple-300" />
+                <span>Discover Events</span>
+              </Link>
+              <Link
+                to="/register?type=attendee"
+                className="interactive-btn w-full sm:w-auto px-6 py-3.5 bg-white border border-[#E9E8F0] hover:border-[#6425E8]/50 text-[#111126] font-semibold text-sm rounded-xl hover:bg-[#F8F8FC] transition shadow-xs flex items-center justify-center space-x-2 group"
+              >
+                <Users className="w-4 h-4 text-[#6425E8]" />
+                <span>Join as Attendee</span>
+              </Link>
+            </>
+          )}
         </div>
 
-        {/* SPOTLIGHT MODULE: EVENTRA CREATE (Interactive Demo Engine) */}
-        <section id="eventra-create" className="mt-20 bg-white border border-[#E9E8F0] rounded-3xl p-6 sm:p-10 shadow-xl max-w-4xl mx-auto text-left relative overflow-hidden animate-fade-in-up delay-300">
+        {/* SPOTLIGHT MODULE: EVENTRA CREATE — THE HOST & PARTICIPANT WORKFLOW */}
+        <section id="eventra-create" className="mt-20 bg-white border border-[#E9E8F0] rounded-3xl p-6 sm:p-10 shadow-xl max-w-5xl mx-auto text-left relative overflow-hidden animate-fade-in-up delay-300">
           {/* Subtle Top Glow Accent */}
           <div className="absolute top-0 left-1/4 right-1/4 h-[2px] bg-gradient-to-r from-transparent via-[#6425E8] to-transparent opacity-80" />
 
@@ -283,208 +144,155 @@ export const LandingPage: React.FC = () => {
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-xs font-bold uppercase tracking-wider text-[#6425E8] bg-[#6425E8]/10 px-3 py-1 rounded-full flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#6425E8] animate-pulse" />
-                  Core Module
+                  Core Flagship Engine
                 </span>
                 <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full">
-                  Live & Operational
+                  Host & Participant Workflow
                 </span>
               </div>
               <h2 className="text-xl sm:text-2xl font-bold text-[#111126] mt-1">
-                Eventra Create — Personalised Event Flyers
+                Eventra Create — How Flyer Campaigns Work
               </h2>
-              <p className="text-sm text-[#525266] mt-1">
-                Upload your flyer artwork once. Participants personalize with their own photo and name in seconds.
+              <p className="text-sm text-[#525266] mt-1 max-w-2xl">
+                Hosts configure flyer coordinates once and get an instant participation link. Participants open the link to upload their photo and generate personalised flyers directly.
               </p>
             </div>
 
-            {/* Interactive demo tabs with smooth state transitions */}
-            <div className="flex items-center gap-1 p-1 bg-[#F1F3F9] rounded-xl self-start sm:self-auto border border-[#E9E8F0]">
-              <button
-                onClick={() => setDemoStep('original')}
-                className={`interactive-btn px-3.5 py-2 text-sm font-semibold rounded-lg transition-all ${
-                  demoStep === 'original' 
-                    ? 'bg-white text-[#111126] shadow-sm font-bold scale-[1.02]' 
-                    : 'text-[#5A5A72] hover:text-[#111126]'
-                }`}
-              >
-                1. Base Template
-              </button>
-              <button
-                onClick={() => setDemoStep('upload')}
-                className={`interactive-btn px-3.5 py-2 text-sm font-semibold rounded-lg transition-all ${
-                  demoStep === 'upload' 
-                    ? 'bg-white text-[#111126] shadow-sm font-bold scale-[1.02]' 
-                    : 'text-[#5A5A72] hover:text-[#111126]'
-                }`}
-              >
-                2. Attendee Input
-              </button>
-              <button
-                onClick={handleGenerateDemo}
-                className={`interactive-btn px-3.5 py-2 text-sm font-semibold rounded-lg transition-all ${
-                  demoStep === 'completed' 
-                    ? 'bg-[#6425E8] text-white shadow-sm font-bold scale-[1.02]' 
-                    : 'text-[#5A5A72] hover:text-[#111126]'
-                }`}
-              >
-                3. Final Result
-              </button>
+            <Link
+              to="/register?type=host"
+              className="px-4 py-2 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-bold rounded-xl shadow-xs transition self-start sm:self-auto shrink-0 flex items-center gap-1.5"
+            >
+              <span>Start as Host</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          {/* 4 Step Architecture Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            {/* Step 1 */}
+            <div className="p-5 rounded-2xl bg-[#F8F8FC] border border-[#E9E8F0] flex flex-col justify-between space-y-4 hover:border-[#6425E8]/40 hover:bg-white hover:shadow-sm transition-all group">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="w-7 h-7 rounded-lg bg-[#6425E8]/10 text-[#6425E8] font-bold text-xs flex items-center justify-center">
+                    01
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#555567] bg-white px-2 py-0.5 rounded border border-[#E9E8F0]">
+                    Host Setup
+                  </span>
+                </div>
+                <h3 className="font-bold text-sm text-[#111126] group-hover:text-[#6425E8] transition-colors">
+                  1. Register & Create Event
+                </h3>
+                <p className="text-xs text-[#525266] leading-relaxed">
+                  Sign up as a Host, enter your event title, date, venue, and upload the official master flyer artwork.
+                </p>
+              </div>
+
+              <div className="p-3 bg-white rounded-xl border border-[#E9E8F0] space-y-2">
+                <div className="h-2 w-16 bg-[#6425E8]/20 rounded-full" />
+                <div className="h-1.5 w-full bg-[#E9E8F0] rounded-full" />
+                <div className="h-1.5 w-3/4 bg-[#E9E8F0] rounded-full" />
+              </div>
+            </div>
+
+            {/* Step 2 */}
+            <div className="p-5 rounded-2xl bg-[#F8F8FC] border border-[#E9E8F0] flex flex-col justify-between space-y-4 hover:border-[#6425E8]/40 hover:bg-white hover:shadow-sm transition-all group">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="w-7 h-7 rounded-lg bg-[#6425E8]/10 text-[#6425E8] font-bold text-xs flex items-center justify-center">
+                    02
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#555567] bg-white px-2 py-0.5 rounded border border-[#E9E8F0]">
+                    Canvas Studio
+                  </span>
+                </div>
+                <h3 className="font-bold text-sm text-[#111126] group-hover:text-[#6425E8] transition-colors">
+                  2. Position Coordinates
+                </h3>
+                <p className="text-xs text-[#525266] leading-relaxed">
+                  In Eventra Create, visually place the photo crop frame (Circle or Square) and style the participant typography.
+                </p>
+              </div>
+
+              <div className="p-3 bg-white rounded-xl border border-[#E9E8F0] flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full border-2 border-dashed border-[#6425E8] bg-[#6425E8]/5 flex items-center justify-center text-[10px] font-bold text-[#6425E8]">
+                  Photo Slot
+                </div>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="p-5 rounded-2xl bg-[#F8F8FC] border border-[#E9E8F0] flex flex-col justify-between space-y-4 hover:border-[#6425E8]/40 hover:bg-white hover:shadow-sm transition-all group">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="w-7 h-7 rounded-lg bg-[#6425E8]/10 text-[#6425E8] font-bold text-xs flex items-center justify-center">
+                    03
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                    Instant Link
+                  </span>
+                </div>
+                <h3 className="font-bold text-sm text-[#111126] group-hover:text-[#6425E8] transition-colors">
+                  3. Share Participant Link
+                </h3>
+                <p className="text-xs text-[#525266] leading-relaxed">
+                  Eventra generates your unique link (<code className="text-[#6425E8] font-mono">/e/slug</code>). Send it to your attendees via WhatsApp, email, or social media.
+                </p>
+              </div>
+
+              <div className="p-2.5 bg-white rounded-xl border border-[#E9E8F0] flex items-center justify-between gap-1">
+                <span className="font-mono text-[10px] text-[#6425E8] truncate">
+                  eventra.io/e/your-event
+                </span>
+                <span className="text-[10px] font-bold text-white bg-[#6425E8] px-2 py-0.5 rounded-md">
+                  Copy
+                </span>
+              </div>
+            </div>
+
+            {/* Step 4 */}
+            <div className="p-5 rounded-2xl bg-[#F8F8FC] border border-[#E9E8F0] flex flex-col justify-between space-y-4 hover:border-[#6425E8]/40 hover:bg-white hover:shadow-sm transition-all group">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center">
+                    04
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    300 DPI Export
+                  </span>
+                </div>
+                <h3 className="font-bold text-sm text-[#111126] group-hover:text-[#6425E8] transition-colors">
+                  4. Participants Download
+                </h3>
+                <p className="text-xs text-[#525266] leading-relaxed">
+                  Participants open the link, upload their photo with automatic smart face framing, and download pristine flyers in seconds.
+                </p>
+              </div>
+
+              <div className="p-2.5 bg-emerald-50/70 rounded-xl border border-emerald-200/60 flex items-center justify-center gap-1.5 text-emerald-800 text-xs font-bold">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Zero Account Needed</span>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-            {/* Step 1: Base Flyer */}
-            <div 
-              onClick={() => setDemoStep('original')}
-              className={`interactive-card p-5 rounded-2xl border cursor-pointer transition-all ${
-                demoStep === 'original' 
-                  ? 'border-[#6425E8] ring-2 ring-[#6425E8]/20 bg-[#6425E8]/5 shadow-md -translate-y-1' 
-                  : 'border-[#E9E8F0] bg-[#F8F8FC] opacity-90 hover:opacity-100 hover:border-gray-300'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-[#525266] uppercase tracking-wider">1. Original Artwork</span>
-                <span className="text-xs font-semibold text-[#525266] bg-white px-2 py-0.5 rounded border border-[#E9E8F0]">Untouched</span>
-              </div>
-              <div className="aspect-[3/4] bg-[#111126] rounded-xl p-4 flex flex-col justify-between text-white relative overflow-hidden shadow-inner group">
-                <div className="text-xs font-bold tracking-widest text-[#9638F5] text-center">NEXT HORIZON 2026</div>
-                <div className="w-20 h-20 rounded-full border-2 border-dashed border-[#9638F5] bg-white/10 self-center flex items-center justify-center text-xs font-bold text-[#B366FF] animate-pulse">
-                  Photo Slot
-                </div>
-                <div className="w-3/4 mx-auto border border-dashed border-[#9638F5]/40 py-1 text-center text-xs text-white/70 rounded">
-                  [Participant Name]
-                </div>
-                <div className="text-[10px] text-center text-slate-400">SAN FRANCISCO · VIRTUAL</div>
-              </div>
-              <p className="text-sm text-[#525266] mt-3 leading-relaxed">
-                The original design remains untouched except for designated coordinates.
+          {/* Bottom Host Banner Callout */}
+          <div className="mt-8 p-5 bg-gradient-to-r from-[#6425E8]/10 via-[#8B5CF6]/10 to-transparent rounded-2xl border border-[#6425E8]/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="space-y-1 text-center sm:text-left">
+              <h4 className="font-bold text-sm text-[#111126]">
+                Ready to empower your participants?
+              </h4>
+              <p className="text-xs text-[#525266]">
+                Register as a host, upload your flyer artwork, and get your dedicated participant link in under 2 minutes.
               </p>
             </div>
-
-            {/* Step 2: Interactive Participant Form */}
-            <div 
-              onClick={() => setDemoStep('upload')}
-              className={`interactive-card p-5 rounded-2xl border cursor-pointer transition-all ${
-                demoStep === 'upload' 
-                  ? 'border-[#6425E8] ring-2 ring-[#6425E8]/20 bg-[#6425E8]/5 shadow-md -translate-y-1' 
-                  : 'border-[#E9E8F0] bg-[#F8F8FC] opacity-90 hover:opacity-100 hover:border-gray-300'
-              }`}
+            <Link
+              to="/register?type=host"
+              className="interactive-btn px-5 py-2.5 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-bold rounded-xl shadow-xs transition whitespace-nowrap flex items-center gap-1.5"
             >
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-[#525266] uppercase tracking-wider">2. Participant Form</span>
-                <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200">Interactive</span>
-              </div>
-              <div className="aspect-[3/4] bg-white rounded-xl p-4 flex flex-col justify-between border border-[#E9E8F0] shadow-sm">
-                <div>
-                  <span className="text-xs font-bold text-[#525266] uppercase block tracking-wider">Type Attendee Name</span>
-                  <input
-                    type="text"
-                    value={demoName}
-                    onChange={(e) => setDemoName(e.target.value)}
-                    placeholder="Enter full name"
-                    className="w-full px-3 py-2 bg-[#F8F8FC] border border-[#CBD5E1] rounded-lg text-sm font-semibold text-[#111126] mt-1.5 focus:outline-none focus:border-[#6425E8]"
-                  />
-                </div>
-
-                <div>
-                  <span className="text-xs font-bold text-[#525266] uppercase block mb-1.5 tracking-wider">Select Attendee Avatar</span>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(['elena', 'marcus', 'sarah'] as const).map((key) => {
-                      const av = avatarPresets[key];
-                      const active = demoAvatar === key;
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDemoAvatar(key);
-                            if (demoName === avatarPresets.elena.name || demoName === avatarPresets.marcus.name || demoName === avatarPresets.sarah.name) {
-                              setDemoName(av.name);
-                            }
-                          }}
-                          className={`p-1.5 rounded-xl border text-center transition ${
-                            active
-                              ? 'border-[#6425E8] bg-[#6425E8]/10 ring-2 ring-[#6425E8]/40 shadow-xs'
-                              : 'border-[#E9E8F0] hover:bg-[#F8F8FC]'
-                          }`}
-                        >
-                          <div className={`w-8 h-8 mx-auto rounded-full bg-gradient-to-tr ${av.gradient} flex items-center justify-center text-white font-bold text-xs`}>
-                            {av.initials}
-                          </div>
-                          <span className="text-xs font-semibold text-[#111126] block truncate mt-1">
-                            {av.name.split(' ')[0]}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleGenerateDemo();
-                    }}
-                    className="interactive-btn w-full py-2.5 bg-[#6425E8] hover:bg-[#4214B8] text-white text-center rounded-xl text-sm font-semibold shadow-xs transition flex items-center justify-center space-x-1.5"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Generate My Flyer</span>
-                  </button>
-                </div>
-              </div>
-              <p className="text-sm text-[#525266] mt-3 leading-relaxed">
-                Zero app installs required. Type a name to test live composition.
-              </p>
-            </div>
-
-            {/* Step 3: High-Res Composite Flyer */}
-            <div 
-              onClick={handleGenerateDemo}
-              className={`interactive-card p-5 rounded-2xl border cursor-pointer transition-all ${
-                demoStep === 'completed' 
-                  ? 'border-[#6425E8] ring-2 ring-[#6425E8]/20 bg-[#6425E8]/5 shadow-md -translate-y-1' 
-                  : 'border-[#E9E8F0] bg-[#F8F8FC] opacity-90 hover:opacity-100 hover:border-gray-300'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-[#6425E8] uppercase flex items-center gap-1 tracking-wider">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  3. Personalised Flyer
-                </span>
-                <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200">
-                  Native 300 DPI
-                </span>
-              </div>
-              <div className="aspect-[3/4] bg-[#111126] rounded-xl p-4 flex flex-col justify-between text-white relative overflow-hidden shadow-md group">
-                <div className="text-xs font-bold tracking-widest text-[#9638F5] text-center">NEXT HORIZON 2026</div>
-                <div className={`w-20 h-20 rounded-full bg-gradient-to-tr ${avatarPresets[demoAvatar].gradient} border-2 border-white/80 self-center flex items-center justify-center text-white font-bold text-sm shadow-lg ring-4 ring-[#9638F5]/30 group-hover:scale-105 transition-transform`}>
-                  {avatarPresets[demoAvatar].initials}
-                </div>
-                <div className="text-center font-bold text-sm tracking-wide text-white drop-shadow truncate px-2">
-                  {demoName || 'Elena Rostova'}
-                </div>
-                <div className="text-xs text-center text-slate-300 uppercase tracking-wider">{demoRole}</div>
-              </div>
-              <div className="flex items-center justify-between mt-3">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDownloadDemo();
-                  }}
-                  className="interactive-btn px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-bold rounded-lg transition flex items-center space-x-1.5"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>{downloadSuccess ? 'Downloaded! 🎉' : 'Download Sample'}</span>
-                </button>
-                <span className="text-xs font-bold text-[#6425E8] flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" /> Ready
-                </span>
-              </div>
-            </div>
+              <span>Create Your Flyer Link</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
         </section>
 

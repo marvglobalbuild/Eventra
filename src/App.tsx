@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LandingPage } from './pages/LandingPage';
 import { Login, Register, PasswordReset } from './pages/AuthPages';
 import { Dashboard } from './pages/Dashboard';
+import { HostDashboard } from './pages/HostDashboard';
+import { AttendeeDashboard } from './pages/AttendeeDashboard';
 import { CreateEvent } from './pages/CreateEvent';
 import { TemplateEditor } from './pages/TemplateEditor';
 import { ParticipantFlyerPage } from './pages/ParticipantFlyerPage';
@@ -49,6 +51,24 @@ export default function App() {
           <Route path="/e/:slug" element={<ParticipantFlyerPage />} />
           <Route path="/flyer/:slug" element={<ParticipantFlyerPage />} />
           <Route path="/p/:slug" element={<ParticipantFlyerPage />} />
+
+          {/* Dedicated Host & Attendee Experiences */}
+          <Route
+            path="/host"
+            element={
+              <ProtectedRoute>
+                <HostDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/attendee"
+            element={
+              <ProtectedRoute>
+                <AttendeeDashboard />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Protected Organiser Workspace Routes */}
           <Route

@@ -7,52 +7,21 @@ import { createSampleFlyerDataUrl } from '../lib/sample-flyers';
 import { storeFileInIDB } from '../lib/storage-and-db';
 import { Navbar } from '../components/Navbar';
 import { 
-  Upload, ArrowLeft, Loader2, AlertCircle, FileImage, 
-  Calendar, MapPin, Tag, ArrowRight, Sparkles, Globe, Lock, Shield
+  Upload, ArrowLeft, Loader2, AlertCircle, 
+  ArrowRight, Sparkles, CheckCircle2, RefreshCw
 } from 'lucide-react';
-
-const CATEGORIES = [
-  'Business',
-  'Conferences',
-  'Workshops',
-  'Education',
-  'Technology',
-  'Religion and Faith',
-  'Church Events',
-  'Music',
-  'Entertainment',
-  'Networking',
-  'Community',
-  'Charity',
-  'Health and Wellness',
-  'Sports',
-  'Lifestyle',
-  'Weddings and Celebrations',
-  'Other',
-];
 
 export const CreateEvent: React.FC = () => {
   const navigate = useNavigate();
-  const { user, currentOrg, profile } = useAuth();
+  const { user, currentOrg, profile, isHost, becomeHost } = useAuth();
 
   const [eventName, setEventName] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('Technology');
-  const [format, setFormat] = useState<'physical' | 'online' | 'hybrid'>('physical');
-  const [onlineUrl, setOnlineUrl] = useState('');
-  const [venue, setVenue] = useState('');
-  const [address, setAddress] = useState('');
-  const [city, setCity] = useState('');
-  const [country, setCountry] = useState('');
-  const [eventDate, setEventDate] = useState('');
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
-  const [timezone, setTimezone] = useState('UTC');
-  const [visibility, setEditVisibility] = useState<'public' | 'unlisted' | 'private'>('public');
-  const [capacity, setCapacity] = useState(500);
-
+  const [organizerName, setOrganizerName] = useState(
+    profile?.full_name || currentOrg?.name || 'Event Host'
+  );
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [selectedSample, setSelectedSample] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,15 +44,34 @@ export const CreateEvent: React.FC = () => {
         return;
       }
       setFile(f);
+      setSelectedSample(null);
       setFilePreview(URL.createObjectURL(f));
       setError(null);
     }
   };
 
+  const handleSelectSample = (type: 'tech' | 'gala' | 'music') => {
+    setSelectedSample(type);
+    setFile(null);
+    const dataUrl = createSampleFlyerDataUrl(type);
+    setFilePreview(dataUrl);
+    if (!eventName) {
+      if (type === 'tech') setEventName('Tech & Innovation Summit');
+      if (type === 'gala') setEventName('Annual Worship Celebration');
+      if (type === 'music') setEventName('Pulse Live Festival');
+    }
+    setError(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eventName.trim()) {
-      setError('Please provide an event title.');
+      setError('Please provide an event or flyer title.');
+      return;
+    }
+
+    if (!file && !selectedSample && !filePreview) {
+      setError('Please upload your flyer image or select a sample design.');
       return;
     }
 
@@ -98,11 +86,13 @@ export const CreateEvent: React.FC = () => {
         const uploadResult = await uploadFlyerFile(file, user?.id || 'anon');
         flyerPath = uploadResult.path;
         flyerDataUrl = uploadResult.dataUrl;
-      } else {
-        // Default clean artwork template based on category
-        const type = category === 'Music' ? 'music' : category.includes('Faith') || category.includes('Church') ? 'gala' : 'tech';
-        flyerDataUrl = createSampleFlyerDataUrl(type);
-        flyerPath = `event-flyers/default-${type}-${Date.now()}.jpg`;
+      } else if (selectedSample) {
+        flyerDataUrl = createSampleFlyerDataUrl(selectedSample as any);
+        flyerPath = `event-flyers/sample-${selectedSample}-${Date.now()}.jpg`;
+        await storeFileInIDB(flyerPath, flyerDataUrl);
+      } else if (filePreview) {
+        flyerDataUrl = filePreview;
+        flyerPath = `event-flyers/custom-${Date.now()}.jpg`;
         await storeFileInIDB(flyerPath, flyerDataUrl);
       }
 
@@ -115,374 +105,244 @@ export const CreateEvent: React.FC = () => {
         org_id: currentOrg?.id || user?.id || '',
         event_name: eventName,
         title: eventName,
-        description: description,
+        description: `Official participation flyer for ${eventName}`,
         slug: slug,
         original_flyer_path: flyerPath,
         original_flyer_data_url: flyerDataUrl,
-        cover_image_url: flyerPath,
-        category: category,
-        event_type: format,
-        online_url: onlineUrl,
-        venue: venue,
-        address: address,
-        city: city || (format === 'online' ? 'Online' : 'Global'),
-        country: country || (format === 'online' ? 'Online' : 'Global'),
-        event_date: eventDate || 'Upcoming',
-        start_time: startTime || '9:00 AM',
-        end_time: endTime || '5:00 PM',
-        timezone: timezone,
-        visibility: visibility,
-        status: 'published',
-        registration_status: 'open',
-        capacity: capacity,
-        organiser_name: profile?.full_name || currentOrg?.name || 'Event Organiser',
-        organiser_email: user?.email || '',
+        category: 'Event',
+        status: 'draft',
+        event_date: new Date().toISOString().split('T')[0],
+        organiser_name: organizerName,
+        venue: organizerName,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
 
-      // Default flyer template coordinates so Eventra Create works out of the box
+      // Default template positioning
       db.saveTemplate({
-        id: `tmpl_${evId}`,
+        id: `tmpl_${Date.now()}`,
         event_id: evId,
-        photo_x: 0.35,
-        photo_y: 0.30,
-        photo_width: 0.30,
-        photo_height: 0.30,
+        photo_x: 0.31,
+        photo_y: 0.32,
+        photo_width: 0.38,
+        photo_height: 0.38,
         photo_shape: 'circle',
-        name_x: 0.20,
-        name_y: 0.65,
-        name_width: 0.60,
-        name_height: 0.06,
+        photo_crop_settings: { zoom: 1, frameScale: 1.0 },
+        name_x: 0.15,
+        name_y: 0.725,
+        name_width: 0.70,
+        name_height: 0.055,
         font_family: 'Plus Jakarta Sans, sans-serif',
-        font_size: 42,
-        font_weight: '800',
-        text_color: '#111126',
+        font_size: 44,
+        font_weight: '700',
+        text_color: '#FFFFFF',
         text_alignment: 'center',
         max_lines: 1,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
 
-      // Navigate straight to the dedicated Event Workspace
-      navigate(`/events/manage/${evId}`);
+      // If user isn't marked as host yet, activate host capability smoothly
+      if (!isHost) {
+        becomeHost();
+      }
+
+      // Seamless redirect directly to canvas coordinate positioning
+      navigate(`/editor/${newEvent.id}`);
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || 'Failed to create event. Please try again.');
-    } finally {
+      setError(err.message || 'Failed to initialize flyer. Please try again.');
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F8FC] flex flex-col font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8]">
+    <div className="min-h-screen bg-[#F8F8FC] flex flex-col font-sans">
       <Navbar />
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 w-full flex-1">
-        <div className="mb-6 flex items-center justify-between">
-          <Link to="/dashboard" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#73738A] hover:text-[#111126]">
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Dashboard</span>
+      <main className="flex-1 max-w-2xl w-full mx-auto px-4 py-8 md:py-12">
+        {/* Navigation & Header */}
+        <div className="mb-6">
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center text-xs font-semibold text-[#5B5B7E] hover:text-[#111126] transition-colors mb-4"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1" />
+            Back to Dashboard
           </Link>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide uppercase bg-[#6425E8]/10 text-[#6425E8]">
+                Step 1 of 2
+              </span>
+              <h1 className="text-2xl md:text-3xl font-extrabold text-[#111126] mt-2 tracking-tight">
+                Create Flyer Link
+              </h1>
+              <p className="text-[#5B5B7E] text-sm mt-1">
+                Upload your flyer artwork, name your event, and configure participant coordinates.
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="bg-white rounded-3xl border border-[#E9E8F0] shadow-sm p-6 sm:p-10 space-y-8">
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-700 text-sm animate-shake">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <p className="font-medium">{error}</p>
+          </div>
+        )}
+
+        {/* Clean, Fast Form */}
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-[#E9E8F0] shadow-sm p-6 md:p-8 space-y-6">
+          
+          {/* Event Title */}
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#6425E8]">
-              Eventra Manage
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111126] mt-1">Create New Event</h1>
-            <p className="text-xs text-[#73738A] mt-1">
-              Configure your event details, set visibility, enable online registration, and prepare attendee flyers.
-            </p>
+            <label className="block text-sm font-bold text-[#111126] mb-2">
+              Event or Campaign Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={eventName}
+              onChange={(e) => setEventName(e.target.value)}
+              placeholder="e.g. Annual Leaders Conference 2026"
+              className="w-full px-4 py-3 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#6425E8] focus:bg-white text-[#111126] font-medium transition-all"
+              required
+            />
           </div>
 
-          {error && (
-            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
+          {/* Flyer Artwork Upload */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-bold text-[#111126]">
+                Flyer Artwork <span className="text-red-500">*</span>
+              </label>
+              <span className="text-xs text-[#5B5B7E]">PNG, JPG or WebP (up to 10MB)</span>
             </div>
-          )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Section 1: Basic Event Details */}
-            <div className="space-y-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-[#111126] pb-2 border-b border-[#F0F0F5]">
-                1. Basic Information
-              </h2>
+            {filePreview ? (
+              <div className="relative rounded-2xl border border-[#E9E8F0] bg-[#111126]/5 p-4 flex flex-col items-center">
+                <div className="max-h-80 w-auto rounded-xl overflow-hidden shadow-md border border-white">
+                  <img
+                    src={filePreview}
+                    alt="Uploaded flyer preview"
+                    className="max-h-80 w-auto object-contain mx-auto"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                  Event Title <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={eventName}
-                  onChange={(e) => setEventName(e.target.value)}
-                  placeholder="e.g. Next Horizon AI Summit 2026"
-                  className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-sm font-semibold text-[#111126] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                  Event Description
-                </label>
-                <textarea
-                  rows={4}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe the schedule, key ministers/speakers, registration highlights, and what attendees can expect..."
-                  className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs text-[#111126] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition leading-relaxed"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                    Category
-                  </label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
+                <div className="mt-4 flex items-center gap-3">
+                  <label
+                    htmlFor="flyer-upload-input"
+                    className="cursor-pointer inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-[#E9E8F0] rounded-lg text-xs font-bold text-[#111126] hover:bg-[#F8F8FC] shadow-sm transition-all"
                   >
-                    {CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                    Format
+                    <RefreshCw className="w-3.5 h-3.5 text-[#6425E8]" />
+                    Change Flyer Image
                   </label>
-                  <select
-                    value={format}
-                    onChange={(e: any) => setFormat(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
-                  >
-                    <option value="physical">In-Person (Physical Venue)</option>
-                    <option value="online">Online (Virtual Stream / Meeting)</option>
-                    <option value="hybrid">Hybrid (Physical & Virtual)</option>
-                  </select>
+                  <input
+                    id="flyer-upload-input"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="sr-only"
+                    onChange={handleFileChange}
+                  />
+                  <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4" /> Flyer Ready
+                  </span>
                 </div>
               </div>
-
-              {(format === 'online' || format === 'hybrid') && (
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                    Online Meeting / Live Stream URL
-                  </label>
-                  <input
-                    type="url"
-                    value={onlineUrl}
-                    onChange={(e) => setOnlineUrl(e.target.value)}
-                    placeholder="https://zoom.us/j/... or https://youtube.com/live/..."
-                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs text-[#111126] focus:bg-white focus:outline-none"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Section 2: Date, Time & Location */}
-            <div className="space-y-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-[#111126] pb-2 border-b border-[#F0F0F5]">
-                2. Date, Time & Location
-              </h2>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                    Event Date
-                  </label>
-                  <input
-                    type="text"
-                    value={eventDate}
-                    onChange={(e) => setEventDate(e.target.value)}
-                    placeholder="e.g. November 15, 2026"
-                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                    Start Time
-                  </label>
-                  <input
-                    type="text"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    placeholder="e.g. 5:00 PM"
-                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                    Timezone
-                  </label>
-                  <input
-                    type="text"
-                    value={timezone}
-                    onChange={(e) => setTimezone(e.target.value)}
-                    placeholder="e.g. WAT (UTC+1)"
-                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {format !== 'online' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                      Venue Name
-                    </label>
-                    <input
-                      type="text"
-                      value={venue}
-                      onChange={(e) => setVenue(e.target.value)}
-                      placeholder="e.g. Landmark Centre or Church Auditorium"
-                      className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                      Address
-                    </label>
-                    <input
-                      type="text"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder="Street address..."
-                      className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs text-[#111126] focus:bg-white focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                      City
-                    </label>
-                    <input
-                      type="text"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      placeholder="e.g. Lagos, Uyo, London"
-                      className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                      Country
-                    </label>
-                    <input
-                      type="text"
-                      value={country}
-                      onChange={(e) => setCountry(e.target.value)}
-                      placeholder="e.g. Nigeria, United Kingdom"
-                      className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Section 3: Visibility & Capacity */}
-            <div className="space-y-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-[#111126] pb-2 border-b border-[#F0F0F5]">
-                3. Visibility & Capacity
-              </h2>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                    Visibility State (Section 3.2)
-                  </label>
-                  <select
-                    value={visibility}
-                    onChange={(e: any) => setEditVisibility(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
-                  >
-                    <option value="public">Public (Appears on Eventra Discover)</option>
-                    <option value="unlisted">Unlisted (Accessible by link only)</option>
-                    <option value="private">Private (Restricted to invited attendees)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                    Attendee Capacity
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={capacity}
-                    onChange={(e) => setCapacity(parseInt(e.target.value, 10) || 500)}
-                    className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:bg-white focus:outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Section 4: Flyer / Artwork Upload */}
-            <div className="space-y-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-[#111126] pb-2 border-b border-[#F0F0F5]">
-                4. Flyer & Cover Image
-              </h2>
-
-              <div className="border-2 border-dashed border-[#E9E8F0] hover:border-[#6425E8] rounded-2xl p-6 text-center cursor-pointer bg-[#F8F8FC] transition relative">
-                <input
-                  type="file"
-                  accept="image/png, image/jpeg, image/webp"
-                  onChange={handleFileChange}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                />
-                {filePreview ? (
-                  <div className="space-y-2">
-                    <img
-                      src={filePreview}
-                      alt="Flyer Preview"
-                      className="max-h-48 rounded-xl mx-auto object-contain border border-[#E9E8F0] shadow-sm"
-                    />
-                    <p className="text-xs font-bold text-[#6425E8]">Click to choose a different flyer image</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="w-12 h-12 rounded-2xl bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center mx-auto">
-                      <Upload className="w-6 h-6" />
-                    </div>
-                    <p className="text-xs font-bold text-[#111126]">Upload High-Resolution Event Artwork</p>
-                    <p className="text-[11px] text-[#73738A]">PNG, JPG, or WebP. If left blank, a branded template is generated.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Submit Action */}
-            <div className="pt-4 border-t border-[#F0F0F5] flex justify-end">
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-8 py-3.5 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm transition flex items-center gap-2"
+            ) : (
+              <label
+                htmlFor="flyer-upload-dropzone"
+                className="group relative flex flex-col items-center justify-center border-2 border-dashed border-[#D2D1E0] hover:border-[#6425E8] bg-[#F8F8FC] hover:bg-[#6425E8]/5 rounded-2xl p-8 cursor-pointer transition-all"
               >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Publishing Event...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Create & Launch Event Workspace</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
+                <input
+                  id="flyer-upload-dropzone"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="sr-only"
+                  onChange={handleFileChange}
+                />
+                <div className="w-14 h-14 rounded-2xl bg-white border border-[#E9E8F0] group-hover:scale-105 flex items-center justify-center text-[#6425E8] shadow-sm mb-3 transition-transform">
+                  <Upload className="w-6 h-6" />
+                </div>
+                <p className="text-sm font-bold text-[#111126]">
+                  Click to upload flyer or drag & drop
+                </p>
+                <p className="text-xs text-[#5B5B7E] mt-1">
+                  High-resolution square or portrait flyer (recommended: 1080×1080 or 1080×1350)
+                </p>
+              </label>
+            )}
+
+            {/* Quick Sample Fly Options if testing */}
+            {!filePreview && (
+              <div className="mt-3 pt-3 border-t border-[#E9E8F0]/60">
+                <span className="text-xs text-[#5B5B7E] font-medium mr-2">Or test with starter design:</span>
+                <div className="inline-flex flex-wrap gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSample('tech')}
+                    className="text-xs font-semibold px-2.5 py-1 bg-white hover:bg-[#6425E8]/10 hover:text-[#6425E8] border border-[#E9E8F0] rounded-lg text-[#5B5B7E] transition-colors"
+                  >
+                    Tech Summit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSample('gala')}
+                    className="text-xs font-semibold px-2.5 py-1 bg-white hover:bg-[#6425E8]/10 hover:text-[#6425E8] border border-[#E9E8F0] rounded-lg text-[#5B5B7E] transition-colors"
+                  >
+                    Worship & Faith
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSample('music')}
+                    className="text-xs font-semibold px-2.5 py-1 bg-white hover:bg-[#6425E8]/10 hover:text-[#6425E8] border border-[#E9E8F0] rounded-lg text-[#5B5B7E] transition-colors"
+                  >
+                    Live Music
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Organizer / Host Name */}
+          <div>
+            <label className="block text-sm font-bold text-[#111126] mb-2">
+              Organizer / Host Name <span className="text-xs font-normal text-[#5B5B7E]">(Optional)</span>
+            </label>
+            <input
+              type="text"
+              value={organizerName}
+              onChange={(e) => setOrganizerName(e.target.value)}
+              placeholder="e.g. Acme Community"
+              className="w-full px-4 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#6425E8] focus:bg-white text-[#111126] font-medium text-sm transition-all"
+            />
+          </div>
+
+          {/* Action Button */}
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 px-6 bg-[#6425E8] hover:bg-[#521dc4] text-white font-bold rounded-xl shadow-lg shadow-[#6425E8]/25 flex items-center justify-center gap-2 transition-all transform active:scale-[0.99] disabled:opacity-50"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Preparing Flyer Canvas...</span>
+                </>
+              ) : (
+                <>
+                  <span>Continue to Position Photo & Name</span>
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
+            </button>
+            <p className="text-center text-xs text-[#5B5B7E] mt-3">
+              Next step: Position where participant photo and name will appear on the flyer.
+            </p>
+          </div>
+        </form>
       </main>
     </div>
   );

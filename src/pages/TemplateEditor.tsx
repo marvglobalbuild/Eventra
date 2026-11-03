@@ -6,15 +6,24 @@ import { FlyerEvent, FlyerTemplate } from '../types/database';
 import { renderPersonalisedFlyer, triggerFlyerCelebration } from '../lib/canvas-engine';
 import { createSamplePortraitDataUrl } from '../lib/sample-flyers';
 import { EventraLogo } from '../components/EventraLogo';
+import { useAuth } from '../context/AuthContext';
 import { 
   ArrowLeft, Check, Copy, Eye, Layout, Type, Image as ImageIcon, 
   ExternalLink, Loader2, Move, RotateCcw, Sliders, CheckCircle2,
-  AlignCenterHorizontal, AlignCenterVertical, Crosshair, ZoomIn, ZoomOut, Share2
+  AlignCenterHorizontal, AlignCenterVertical, Crosshair, ZoomIn, ZoomOut, Share2, Sparkles,
+  MessageCircle, Globe, AlertTriangle
 } from 'lucide-react';
+import { 
+  getParticipantFlyerUrl, 
+  isCloudRunPreview, 
+  getCustomPublicDomain, 
+  setCustomPublicDomain 
+} from '../lib/domain-config';
 
 export const TemplateEditor: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
+  const { isHost, becomeHost } = useAuth();
 
   const [event, setEvent] = useState<FlyerEvent | null>(null);
   const [template, setTemplate] = useState<FlyerTemplate | null>(null);
@@ -260,9 +269,20 @@ export const TemplateEditor: React.FC = () => {
     }, 450);
   };
 
+  const [customDomain, setCustomDomain] = useState<string>(getCustomPublicDomain());
+  const [showDomainInput, setShowDomainInput] = useState(false);
+  const [tempDomain, setTempDomain] = useState(getCustomPublicDomain());
+
   const getPublicUrl = () => {
     if (!event) return '';
-    return `${window.location.origin}/e/${event.slug}`;
+    return getParticipantFlyerUrl(event.slug);
+  };
+
+  const handleSaveDomain = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCustomPublicDomain(tempDomain);
+    setCustomDomain(getCustomPublicDomain());
+    setShowDomainInput(false);
   };
 
   const handleCopyLink = () => {
@@ -270,6 +290,33 @@ export const TemplateEditor: React.FC = () => {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (!isHost) {
+    return (
+      <div className="min-h-screen bg-[#F8F8FC] flex flex-col items-center justify-center p-4 font-sans">
+        <div className="bg-white max-w-md w-full p-8 rounded-2xl border border-[#E9E8F0] shadow-sm text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center mx-auto">
+            <Sparkles className="w-6 h-6" />
+          </div>
+          <h2 className="text-xl font-bold text-[#111126]">Host Access Required</h2>
+          <p className="text-xs text-[#73738A] leading-relaxed">
+            Configuring flyer coordinates and generating participant links is restricted to Eventra Hosts.
+          </p>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={async () => {
+                await becomeHost();
+              }}
+              className="w-full py-2.5 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
+            >
+              Activate Host Experience
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading || !event || !template) {
     return (
@@ -347,11 +394,11 @@ export const TemplateEditor: React.FC = () => {
           <button
             onClick={handlePublish}
             disabled={publishing}
-            className="interactive-btn px-3 sm:px-4 py-2 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center space-x-1.5 animate-pulse-glow"
+            className="interactive-btn px-3 sm:px-4 py-2 bg-[#6425E8] hover:bg-[#521dc4] text-white text-xs font-bold rounded-xl shadow-md shadow-[#6425E8]/20 transition flex items-center space-x-1.5"
           >
             {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
-            <span className="hidden sm:inline">Publish & Share</span>
-            <span className="sm:hidden">Publish</span>
+            <span className="hidden sm:inline">Save & Get Link</span>
+            <span className="sm:hidden">Get Link</span>
           </button>
         </div>
       </header>
@@ -941,18 +988,18 @@ export const TemplateEditor: React.FC = () => {
       {/* Share & Publish Modal */}
       {showShareModal && (
         <div className="fixed inset-0 bg-[#111126]/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 border border-[#E9E8F0]">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-7 animate-in fade-in zoom-in-95 border border-[#E9E8F0]">
             <div className="w-12 h-12 bg-[#6425E8]/10 rounded-2xl flex items-center justify-center text-[#6425E8] mb-4">
               <CheckCircle2 className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold text-[#111126]">Eventra Create Campaign Live!</h3>
+            <h3 className="text-xl font-extrabold text-[#111126]">Your Flyer Link is Ready!</h3>
             <p className="text-xs text-[#73738A] mt-1.5 leading-relaxed">
-              Your participants can now open this link on their phone or desktop, upload their portrait, and instantly download their personalised flyer without an account.
+              Send this link to your participants. They can upload their photo and download their personalized flyer in seconds without needing an account.
             </p>
 
             <div className="mt-5 p-3.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl">
-              <span className="text-[10px] font-bold text-[#73738A] uppercase tracking-wider block mb-1">
-                Unique Participant Sharing Link
+              <span className="text-[10px] font-bold text-[#73738A] uppercase tracking-wider block mb-1.5">
+                Participant Flyer Link
               </span>
               <div className="flex items-center space-x-2">
                 <input
@@ -962,29 +1009,117 @@ export const TemplateEditor: React.FC = () => {
                 />
                 <button
                   onClick={handleCopyLink}
-                  className="px-3 py-1.5 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-semibold rounded-lg transition flex items-center space-x-1 shrink-0"
+                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center space-x-1 shrink-0 ${
+                    copied
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-[#6425E8] hover:bg-[#521dc4] text-white shadow-sm'
+                  }`}
                 >
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copied ? 'Copied' : 'Copy'}</span>
+                  <span>{copied ? 'Copied!' : 'Copy Link'}</span>
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-3 mt-6">
+            {/* Quick Actions: WhatsApp & Test */}
+            <div className="mt-4 grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  const url = getPublicUrl();
+                  const message = encodeURIComponent(
+                    `🎉 Upload your photo and get your official personalized flyer for *${event?.event_name || event?.title || 'our event'}* here: ${url}`
+                  );
+                  window.open(`https://api.whatsapp.com/send?text=${message}`, '_blank');
+                }}
+                className="w-full py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>Share WhatsApp</span>
+              </button>
+
               <a
                 href={getPublicUrl()}
                 target="_blank"
                 rel="noreferrer"
-                className="px-4 py-2 border border-[#E9E8F0] text-xs font-semibold rounded-xl flex items-center space-x-1 hover:bg-[#F8F8FC] transition"
+                className="w-full py-2.5 px-3 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition"
               >
-                <span>Test Participant Link</span>
-                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Test Link</span>
+                <ExternalLink className="w-3.5 h-3.5 text-[#5B5B7E]" />
               </a>
+            </div>
+
+            {/* Cloud Run Preview Notice & Vercel Production Domain Switcher */}
+            {isCloudRunPreview() && (
+              <div className="mt-4 p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-left space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-[11px] text-amber-900 leading-relaxed">
+                    <span className="font-bold">Testing on WhatsApp / Mobile Safari:</span>
+                    <p className="mt-0.5 text-amber-800">
+                      The current link is on your internal Cloud Run development preview (<code className="bg-amber-100 px-1 py-0.5 rounded text-[10px]">.run.app</code>). When opened inside WhatsApp or iOS Safari, Apple blocks Google developer preview cookies.
+                    </p>
+                    <p className="mt-1 font-semibold text-amber-950">
+                      🚀 Once deployed to Vercel (or your custom domain), participants access the link directly with zero cookie gates or login prompts!
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-1.5 border-t border-amber-200/60">
+                  {!showDomainInput ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowDomainInput(true)}
+                      className="text-[11px] font-bold text-[#6425E8] hover:underline flex items-center gap-1"
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                      <span>{customDomain ? `Domain: ${customDomain}` : 'Using a Vercel domain? Set it here'}</span>
+                    </button>
+                  ) : (
+                    <form onSubmit={handleSaveDomain} className="space-y-1.5 pt-1">
+                      <label className="text-[10px] font-bold text-amber-900 uppercase">
+                        Vercel / Production URL:
+                      </label>
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          placeholder="https://eventra.vercel.app"
+                          value={tempDomain}
+                          onChange={(e) => setTempDomain(e.target.value)}
+                          className="flex-1 px-2.5 py-1 text-xs bg-white border border-amber-300 rounded-lg outline-none font-mono text-[#111126]"
+                        />
+                        <button
+                          type="submit"
+                          className="px-2.5 py-1 bg-[#6425E8] hover:bg-[#521dc4] text-white text-[11px] font-bold rounded-lg"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowDomainInput(false)}
+                          className="px-2 py-1 text-[11px] text-amber-800 hover:text-black"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between space-x-3 mt-6 pt-4 border-t border-[#E9E8F0]">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="text-xs font-semibold text-[#5B5B7E] hover:text-[#111126] transition"
+              >
+                Go to Dashboard
+              </button>
               <button
                 onClick={() => setShowShareModal(false)}
-                className="px-4 py-2 bg-[#111126] text-white text-xs font-semibold rounded-xl hover:bg-black transition"
+                className="px-5 py-2 bg-[#111126] text-white text-xs font-bold rounded-xl hover:bg-black transition shadow-sm"
               >
-                Done
+                Continue Editing
               </button>
             </div>
           </div>
