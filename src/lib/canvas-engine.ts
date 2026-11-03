@@ -7,6 +7,9 @@ export interface PhotoCropSettings {
   offsetX?: number; // -1 to 1 (horizontal pan)
   offsetY?: number; // -1 to 1 (vertical pan)
   frameScale?: number; // 0.8 to 2.5 (scales the photo container / circle to fill white spaces)
+  frameOffsetX?: number; // -0.2 to 0.2 (nudge photo slot horizontally)
+  frameOffsetY?: number; // -0.2 to 0.2 (nudge photo slot vertically)
+  nameOffsetY?: number; // -0.1 to 0.2 (nudge name badge position down to prevent colliding with circle)
 }
 
 export interface CompositePayload {
@@ -133,15 +136,19 @@ export async function renderPersonalisedFlyer(payload: CompositePayload): Promis
   const photoY = Number(template.photo_y) * height;
   const photoW = Number(template.photo_width) * width;
   const photoH = Number(template.photo_height) * height;
-  // Frame scale allows expanding or shrinking the cutout to fill white flyer placeholders
+  // Frame scale and position offsets (frameOffsetX, frameOffsetY) to center on flyer cutout perfectly
   const frameScale = cropSettings?.frameScale ?? template.photo_crop_settings?.frameScale ?? 1.0;
-  const centerX = photoX + photoW / 2;
-  const centerY = photoY + photoH / 2;
+  const frameOffsetX = (cropSettings?.frameOffsetX ?? template.photo_crop_settings?.frameOffsetX ?? 0) * width;
+  const frameOffsetY = (cropSettings?.frameOffsetY ?? template.photo_crop_settings?.frameOffsetY ?? 0) * height;
+
+  const centerX = photoX + photoW / 2 + frameOffsetX;
+  const centerY = photoY + photoH / 2 + frameOffsetY;
 
   let drawX = photoX;
   let drawY = photoY;
   let drawW = photoW;
   let drawH = photoH;
+  let photoBottom = centerY;
 
   // 3. Render Participant Photo with shape clipping and custom zoom/pan
   ctx.save();
@@ -153,6 +160,7 @@ export async function renderPersonalisedFlyer(payload: CompositePayload): Promis
     drawY = centerY - radius;
     drawW = radius * 2;
     drawH = radius * 2;
+    photoBottom = centerY + radius;
   } else {
     // Rounded rectangle or sharp rectangle
     const targetW = photoW * frameScale;
@@ -165,6 +173,7 @@ export async function renderPersonalisedFlyer(payload: CompositePayload): Promis
     drawY = targetY;
     drawW = targetW;
     drawH = targetH;
+    photoBottom = centerY + targetH / 2;
   }
   ctx.closePath();
   ctx.clip();
@@ -176,14 +185,25 @@ export async function renderPersonalisedFlyer(payload: CompositePayload): Promis
   drawImageCoverWithCrop(ctx, participantImg, drawX, drawY, drawW, drawH, zoom, offsetX, offsetY);
   ctx.restore();
 
-  // 4. Render Participant Name with strict auto-fitting into designated bounding box
+  // 4. Render Participant Name with strict clearance from the photo circle
   const nameBoxX = Number(template.name_x) * width;
-  const nameBoxY = Number(template.name_y) * height;
+  const rawNameBoxY = Number(template.name_y) * height;
   const nameBoxW = Number(template.name_width) * width;
   const nameBoxH = Number(template.name_height) * height;
 
   // Baseline scale relative to standard 1080px width
   const scale = width / 1080;
+
+  // Name position offset (allows user or template to push name down)
+  const attendeeNameOffsetY = (cropSettings?.nameOffsetY ?? template.photo_crop_settings?.nameOffsetY ?? 0) * height;
+
+  // Clearance Guard: Ensure name badge does NOT collide with or hug the photo circle.
+  // Enforces a minimum clearance of at least 24px (scaled) below the bottom edge of the photo frame.
+  const minClearance = 24 * scale;
+  let nameBoxY = rawNameBoxY + attendeeNameOffsetY;
+  if (nameBoxY < photoBottom + minClearance) {
+    nameBoxY = photoBottom + minClearance;
+  }
   
   // Constrain font size by both target box height AND width so it fits within any banner
   const maxFontByHeight = Math.max(14, nameBoxH * 0.72);

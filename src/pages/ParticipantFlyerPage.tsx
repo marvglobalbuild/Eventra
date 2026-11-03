@@ -14,7 +14,8 @@ import { EventraLogo, EventraLogoSymbol } from '../components/EventraLogo';
 import { 
   Camera, Upload, Download, FileImage, FileText, CheckCircle2, 
   RefreshCw, Loader2, AlertCircle, Sparkles, ArrowLeft, Shield, Calendar, 
-  ChevronRight, ZoomIn, ZoomOut, Plus, Minus, RotateCcw, Move, Check, Maximize2
+  ChevronRight, ZoomIn, ZoomOut, Plus, Minus, RotateCcw, Move, Check, Maximize2,
+  Crosshair, Type
 } from 'lucide-react';
 
 export const ParticipantFlyerPage: React.FC = () => {
@@ -42,6 +43,9 @@ export const ParticipantFlyerPage: React.FC = () => {
   // Photo Framing & Zoom Controls
   const [zoom, setZoom] = useState<number>(1.25);
   const [frameScale, setFrameScale] = useState<number>(1.0);
+  const [frameOffsetX, setFrameOffsetX] = useState<number>(0);
+  const [frameOffsetY, setFrameOffsetY] = useState<number>(0);
+  const [nameOffsetY, setNameOffsetY] = useState<number>(0);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
   const dragStartRef = useRef<{ startX: number; startY: number; origPanX: number; origPanY: number }>({
@@ -201,16 +205,16 @@ export const ParticipantFlyerPage: React.FC = () => {
       tmpl = {
         id: `tmpl_${ev.id}`,
         event_id: ev.id,
-        photo_x: 0.28,
-        photo_y: 0.26,
-        photo_width: 0.44,
-        photo_height: 0.44,
+        photo_x: 0.31,
+        photo_y: 0.32,
+        photo_width: 0.38,
+        photo_height: 0.38,
         photo_shape: 'circle',
         photo_crop_settings: { zoom: 1, frameScale: 1.0 },
         name_x: 0.15,
-        name_y: 0.62,
+        name_y: 0.725,
         name_width: 0.70,
-        name_height: 0.08,
+        name_height: 0.055,
         font_family: 'Plus Jakarta Sans, sans-serif',
         font_size: 44,
         font_weight: '700',
@@ -224,11 +228,22 @@ export const ParticipantFlyerPage: React.FC = () => {
     }
     setTemplate(tmpl);
 
-    // Auto-detect if template has small circle width on flyer with large cutout, setting smart fill default
-    if (tmpl.photo_shape === 'circle' && tmpl.photo_width <= 0.32) {
-      setFrameScale(tmpl.photo_crop_settings?.frameScale ?? 1.45);
-    } else if (tmpl.photo_crop_settings?.frameScale) {
-      setFrameScale(tmpl.photo_crop_settings.frameScale);
+    // Auto-detect template parameters and apply optimal centering & spacing
+    if (tmpl.photo_shape === 'circle') {
+      if (tmpl.photo_width <= 0.32) {
+        setFrameScale(tmpl.photo_crop_settings?.frameScale ?? 1.35);
+      } else if (tmpl.photo_crop_settings?.frameScale) {
+        setFrameScale(tmpl.photo_crop_settings.frameScale);
+      }
+      // If template was set higher than the cutout (common default was 0.26-0.28), gently nudge down +4.5% to center in cutout
+      if (tmpl.photo_y <= 0.29) {
+        setFrameOffsetY(0.045);
+      }
+    }
+
+    // If template placed name too close to circle (<= 0.66), offset down by 0.075 so it sits in the designated name badge
+    if (tmpl.name_y <= 0.66) {
+      setNameOffsetY(0.075);
     }
 
     // 7. Resolve flyer image source
@@ -345,6 +360,9 @@ export const ParticipantFlyerPage: React.FC = () => {
           offsetX: normalizedOffsetX,
           offsetY: normalizedOffsetY,
           frameScale,
+          frameOffsetX,
+          frameOffsetY,
+          nameOffsetY,
         },
       });
 
@@ -602,6 +620,7 @@ export const ParticipantFlyerPage: React.FC = () => {
                       style={{
                         width: `${Math.round(176 * Math.min(1.28, Math.max(0.85, frameScale))) }px`,
                         height: `${Math.round(176 * Math.min(1.28, Math.max(0.85, frameScale))) }px`,
+                        transform: `translate(${Math.round(frameOffsetX * 160)}px, ${Math.round(frameOffsetY * 160)}px)`,
                       }}
                     >
                       <img
@@ -773,6 +792,182 @@ export const ParticipantFlyerPage: React.FC = () => {
                         onClick={() => setFrameScale(1.0)}
                         className="text-[10px] font-semibold text-[#73788A] hover:text-[#111126] flex items-center gap-1"
                         title="Reset circle size"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Reset</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Photo Position & Center Alignment Controls */}
+                  <div className="space-y-2.5 pt-2 bg-white p-3 rounded-xl border border-[#E9E8F0]">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-[#111126] flex items-center gap-1.5">
+                        <Move className="w-3.5 h-3.5 text-[#6425E8]" />
+                        <span>Center Fit & Position Nudge</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFrameOffsetX(0);
+                          setFrameOffsetY(0.045);
+                          setFrameScale(1.35);
+                        }}
+                        className="text-[10px] font-bold text-[#6425E8] bg-[#6425E8]/10 hover:bg-[#6425E8]/20 px-2 py-0.5 rounded-md transition flex items-center gap-1"
+                        title="Snap directly into the flyer circular cutout"
+                      >
+                        <Crosshair className="w-3 h-3" />
+                        <span>Snap to Center</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-[11px]">
+                      {/* Vertical Position (Up / Down) */}
+                      <div>
+                        <div className="flex justify-between text-[#73738A] font-semibold mb-1">
+                          <span>Vertical (Y)</span>
+                          <span className="font-mono text-[#111126]">
+                            {frameOffsetY > 0 ? `+${Math.round(frameOffsetY * 100)}%` : `${Math.round(frameOffsetY * 100)}%`}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setFrameOffsetY((prev) => Math.max(-0.12, Number((prev - 0.015).toFixed(3))))}
+                            className="w-7 h-7 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-xs"
+                            title="Move Frame Up"
+                          >
+                            ↑
+                          </button>
+                          <input
+                            type="range"
+                            min="-0.10"
+                            max="0.10"
+                            step="0.005"
+                            value={frameOffsetY}
+                            onChange={(e) => setFrameOffsetY(parseFloat(e.target.value))}
+                            className="flex-1 accent-[#6425E8] h-1.5 bg-[#E9E8F0] rounded-lg cursor-pointer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setFrameOffsetY((prev) => Math.min(0.12, Number((prev + 0.015).toFixed(3))))}
+                            className="w-7 h-7 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-xs"
+                            title="Move Frame Down"
+                          >
+                            ↓
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Horizontal Position (Left / Right) */}
+                      <div>
+                        <div className="flex justify-between text-[#73738A] font-semibold mb-1">
+                          <span>Horizontal (X)</span>
+                          <span className="font-mono text-[#111126]">
+                            {frameOffsetX > 0 ? `+${Math.round(frameOffsetX * 100)}%` : `${Math.round(frameOffsetX * 100)}%`}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setFrameOffsetX((prev) => Math.max(-0.10, Number((prev - 0.015).toFixed(3))))}
+                            className="w-7 h-7 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-xs"
+                            title="Move Frame Left"
+                          >
+                            ←
+                          </button>
+                          <input
+                            type="range"
+                            min="-0.10"
+                            max="0.10"
+                            step="0.005"
+                            value={frameOffsetX}
+                            onChange={(e) => setFrameOffsetX(parseFloat(e.target.value))}
+                            className="flex-1 accent-[#6425E8] h-1.5 bg-[#E9E8F0] rounded-lg cursor-pointer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setFrameOffsetX((prev) => Math.min(0.10, Number((prev + 0.015).toFixed(3))))}
+                            className="w-7 h-7 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-xs"
+                            title="Move Frame Right"
+                          >
+                            →
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Name Spacing & Distance from Circle */}
+                  <div className="space-y-2 pt-2 bg-white p-3 rounded-xl border border-[#E9E8F0]">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-[#111126] flex items-center gap-1.5">
+                        <Type className="w-3.5 h-3.5 text-[#6425E8]" />
+                        <span>Name Distance from Circle</span>
+                      </span>
+                      <span className="font-mono font-bold text-[#6425E8] bg-[#6425E8]/10 px-2 py-0.5 rounded-md text-[11px]">
+                        {nameOffsetY >= 0.06 ? 'Spaced (Roomy)' : nameOffsetY >= 0.03 ? 'Standard Gap' : 'Default'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setNameOffsetY((prev) => Math.max(0.0, Number((prev - 0.015).toFixed(3))))}
+                        className="w-8 h-8 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-sm shadow-2xs active:scale-95 transition"
+                        title="Move Name Closer"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+
+                      <input
+                        type="range"
+                        min="0.0"
+                        max="0.12"
+                        step="0.005"
+                        value={nameOffsetY}
+                        onChange={(e) => setNameOffsetY(parseFloat(e.target.value))}
+                        className="flex-1 accent-[#6425E8] h-2 bg-[#E9E8F0] rounded-lg cursor-pointer"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setNameOffsetY((prev) => Math.min(0.15, Number((prev + 0.015).toFixed(3))))}
+                        className="w-8 h-8 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-sm shadow-2xs active:scale-95 transition"
+                        title="Push Name Down (Increase Space)"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Quick Name Spacing Presets */}
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { label: 'Standard (+20px)', val: 0.025 },
+                          { label: 'Comfortable (+50px)', val: 0.055 },
+                          { label: 'Lower Badge (+80px)', val: 0.085 },
+                        ].map((p) => (
+                          <button
+                            key={p.val}
+                            type="button"
+                            onClick={() => setNameOffsetY(p.val)}
+                            className={`px-2 py-0.5 text-[10px] font-semibold rounded-md transition ${
+                              Math.abs(nameOffsetY - p.val) < 0.02
+                                ? 'bg-[#6425E8] text-white shadow-xs'
+                                : 'bg-[#F8F8FC] border border-[#E9E8F0] text-[#73738A] hover:text-[#111126]'
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setNameOffsetY(0.05)}
+                        className="text-[10px] font-semibold text-[#73788A] hover:text-[#111126] flex items-center gap-1"
+                        title="Reset to comfortable gap"
                       >
                         <RotateCcw className="w-3 h-3" />
                         <span>Reset</span>

@@ -64,16 +64,16 @@ export const TemplateEditor: React.FC = () => {
       tmpl = {
         id: `tmpl_${Date.now()}`,
         event_id: eventId,
-        photo_x: 0.28,
-        photo_y: 0.26,
-        photo_width: 0.44,
-        photo_height: 0.44,
+        photo_x: 0.31,
+        photo_y: 0.32,
+        photo_width: 0.38,
+        photo_height: 0.38,
         photo_shape: 'circle',
         photo_crop_settings: { zoom: 1, frameScale: 1.0 },
         name_x: 0.15,
-        name_y: 0.62,
+        name_y: 0.725,
         name_width: 0.70,
-        name_height: 0.08,
+        name_height: 0.055,
         font_family: 'Plus Jakarta Sans, sans-serif',
         font_size: 44,
         font_weight: '700',
@@ -120,8 +120,8 @@ export const TemplateEditor: React.FC = () => {
 
   const handleAlignNameToPhoto = () => {
     if (!template) return;
-    // Align name horizontally centered with photo and place right below photo
-    const newNameY = Math.min(0.90, Number((template.photo_y + template.photo_height + 0.03).toFixed(4)));
+    // Align name horizontally centered with photo and place right below photo with comfortable breathing clearance
+    const newNameY = Math.min(0.90, Number((template.photo_y + template.photo_height + 0.05).toFixed(4)));
     const newNameX = Number(((1 - template.name_width) / 2).toFixed(4));
     setTemplate({
       ...template,

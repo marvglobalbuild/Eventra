@@ -67,6 +67,9 @@ export interface FlyerTemplate {
     offsetY?: number;
     borderRadius?: number;
     frameScale?: number;
+    frameOffsetX?: number;
+    frameOffsetY?: number;
+    nameOffsetY?: number;
   };
   name_x: number; // Normalized 0.0 to 1.0
   name_y: number; // Normalized 0.0 to 1.0
