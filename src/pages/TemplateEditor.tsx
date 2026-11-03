@@ -8,8 +8,8 @@ import { createSamplePortraitDataUrl } from '../lib/sample-flyers';
 import { EventraLogo } from '../components/EventraLogo';
 import { 
   ArrowLeft, Check, Copy, Eye, Layout, Type, Image as ImageIcon, 
-  ExternalLink, Sparkles, Loader2, Move, RotateCcw, Sliders, CheckCircle2,
-  AlignCenterHorizontal, AlignCenterVertical, Crosshair, ZoomIn, ZoomOut
+  ExternalLink, Loader2, Move, RotateCcw, Sliders, CheckCircle2,
+  AlignCenterHorizontal, AlignCenterVertical, Crosshair, ZoomIn, ZoomOut, Share2
 } from 'lucide-react';
 
 export const TemplateEditor: React.FC = () => {
@@ -349,7 +349,7 @@ export const TemplateEditor: React.FC = () => {
             disabled={publishing}
             className="interactive-btn px-3 sm:px-4 py-2 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center space-x-1.5 animate-pulse-glow"
           >
-            {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
             <span className="hidden sm:inline">Publish & Share</span>
             <span className="sm:hidden">Publish</span>
           </button>
@@ -455,7 +455,8 @@ export const TemplateEditor: React.FC = () => {
                   left: `${template.photo_x * 100}%`,
                   top: `${template.photo_y * 100}%`,
                   width: `${template.photo_width * 100}%`,
-                  height: `${template.photo_height * 100}%`,
+                  aspectRatio: template.photo_shape === 'circle' ? '1 / 1' : undefined,
+                  height: template.photo_shape === 'circle' ? undefined : `${template.photo_height * 100}%`,
                   borderRadius: template.photo_shape === 'circle' ? '9999px' : '8px',
                 }}
                 className={`absolute border-2 cursor-grab active:cursor-grabbing flex items-center justify-center transition-all touch-none select-none ${
@@ -942,7 +943,7 @@ export const TemplateEditor: React.FC = () => {
         <div className="fixed inset-0 bg-[#111126]/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 border border-[#E9E8F0]">
             <div className="w-12 h-12 bg-[#6425E8]/10 rounded-2xl flex items-center justify-center text-[#6425E8] mb-4">
-              <Sparkles className="w-6 h-6" />
+              <CheckCircle2 className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-bold text-[#111126]">Eventra Create Campaign Live!</h3>
             <p className="text-xs text-[#73738A] mt-1.5 leading-relaxed">

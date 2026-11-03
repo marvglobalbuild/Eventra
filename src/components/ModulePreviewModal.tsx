@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FeatureModule } from '../types/database';
-import { X, Sparkles, Check, ArrowRight, ShieldCheck, Clock } from 'lucide-react';
+import { X, Check, ArrowRight, ShieldCheck, Clock, CheckCircle2 } from 'lucide-react';
 import { EventraLogoSymbol } from './EventraLogo';
 
 interface ModulePreviewModalProps {
@@ -85,7 +85,7 @@ export const ModulePreviewModal: React.FC<ModulePreviewModalProps> = ({ module, 
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Notify My Organisation On Availability</span>
                 </>
               )}

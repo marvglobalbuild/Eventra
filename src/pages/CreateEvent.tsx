@@ -7,8 +7,8 @@ import { createSampleFlyerDataUrl } from '../lib/sample-flyers';
 import { storeFileInIDB } from '../lib/storage-and-db';
 import { EventraLogo } from '../components/EventraLogo';
 import { 
-  Upload, ArrowLeft, Loader2, Sparkles, AlertCircle, FileImage, Layers,
-  Calendar, MapPin, Tag
+  Upload, ArrowLeft, Loader2, AlertCircle, FileImage, Layers,
+  Calendar, MapPin, Tag, ArrowRight
 } from 'lucide-react';
 
 export const CreateEvent: React.FC = () => {
@@ -428,7 +428,7 @@ export const CreateEvent: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4" />
+                  <ArrowRight className="w-4 h-4" />
                   <span>Continue to Eventra Create Positioning</span>
                 </>
               )}

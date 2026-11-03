@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { db, initializeLocalData } from '../lib/storage-and-db';
 import { resolveFlyerSource, uploadParticipantPhoto, getSupabase } from '../lib/supabase';
@@ -10,12 +10,13 @@ import {
   triggerFlyerCelebration 
 } from '../lib/canvas-engine';
 import { createSamplePortraitDataUrl, createSampleFlyerDataUrl } from '../lib/sample-flyers';
-import { EventraLogo, EventraLogoSymbol } from '../components/EventraLogo';
+import { EventraLogo } from '../components/EventraLogo';
 import { 
   Camera, Upload, Download, FileImage, FileText, CheckCircle2, 
-  RefreshCw, Loader2, AlertCircle, Sparkles, ArrowLeft, Shield, Calendar, 
-  ChevronRight, ZoomIn, ZoomOut, Plus, Minus, RotateCcw, Move, Check, Maximize2,
-  Crosshair, Type
+  RefreshCw, Loader2, AlertCircle, ArrowLeft, Shield, Calendar, 
+  ChevronRight, ZoomIn, ZoomOut, Plus, Minus, RotateCcw, Move, 
+  Check, Maximize2, Sliders, SlidersHorizontal, ChevronDown, 
+  ChevronUp, User, Type, Palette
 } from 'lucide-react';
 
 export const ParticipantFlyerPage: React.FC = () => {
@@ -42,15 +43,20 @@ export const ParticipantFlyerPage: React.FC = () => {
 
   // Photo Framing & Zoom Controls (normalized WYSIWYG)
   const [zoom, setZoom] = useState<number>(1.0);
-  const [frameScale, setFrameScale] = useState<number>(1.0);
+  const [frameScale, setFrameScale] = useState<number>(1.35); // Default to 1.35x to seamlessly cover circular cutouts
   const [frameOffsetX, setFrameOffsetX] = useState<number>(0);
   const [frameOffsetY, setFrameOffsetY] = useState<number>(0);
   const [nameOffsetY, setNameOffsetY] = useState<number>(0);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [selectedTextColor, setSelectedTextColor] = useState<string>('#111126'); // Default to high-contrast dark text
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
+  const [showAdvancedNudge, setShowAdvancedNudge] = useState(false);
 
-  const flyerContainerRef = useRef<HTMLDivElement>(null);
+  // Layout & Exact Pixel Dimensions Tracking
+  const flyerImgRef = useRef<HTMLImageElement>(null);
   const photoSlotRef = useRef<HTMLDivElement>(null);
+  const [flyerAspect, setFlyerAspect] = useState<number>(0.8); // width / height
+  const [flyerRenderDim, setFlyerRenderDim] = useState<{ width: number; height: number }>({ width: 360, height: 450 });
   const [photoNaturalDim, setPhotoNaturalDim] = useState<{ width: number; height: number }>({ width: 1000, height: 1000 });
   const [slotDim, setSlotDim] = useState<{ width: number; height: number }>({ width: 140, height: 140 });
 
@@ -61,20 +67,32 @@ export const ParticipantFlyerPage: React.FC = () => {
     origPanY: 0,
   });
 
-  // Track natural dimensions of attendee photograph
-  useEffect(() => {
-    if (!photoPreviewUrl) return;
-    const img = new Image();
-    img.onload = () => {
-      setPhotoNaturalDim({
-        width: img.naturalWidth || 1000,
-        height: img.naturalHeight || 1000,
-      });
-    };
-    img.src = photoPreviewUrl;
-  }, [photoPreviewUrl]);
+  // Output Result State
+  const [generatedCanvas, setGeneratedCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [resultImageUrl, setResultImageUrl] = useState<string | null>(null);
+  const [participantId, setParticipantId] = useState<string | null>(null);
 
-  // Track rendered slot dimensions on screen with ResizeObserver
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Measure and update the flyer image's rendered dimensions on screen
+  const updateFlyerDimensions = useCallback(() => {
+    if (!flyerImgRef.current) return;
+    const rect = flyerImgRef.current.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setFlyerRenderDim({
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      });
+      setFlyerAspect(rect.width / rect.height);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('resize', updateFlyerDimensions);
+    return () => window.removeEventListener('resize', updateFlyerDimensions);
+  }, [updateFlyerDimensions]);
+
+  // Track rendered slot dimensions on screen
   useEffect(() => {
     if (!photoSlotRef.current) return;
     const updateSlotDim = () => {
@@ -89,17 +107,33 @@ export const ParticipantFlyerPage: React.FC = () => {
     const ro = new ResizeObserver(updateSlotDim);
     ro.observe(photoSlotRef.current);
     return () => ro.disconnect();
-  }, [photoPreviewUrl, frameScale, frameOffsetX, frameOffsetY]);
+  }, [photoPreviewUrl, frameScale, frameOffsetX, frameOffsetY, flyerRenderDim]);
 
-  // Output Result State
-  const [generatedCanvas, setGeneratedCanvas] = useState<HTMLCanvasElement | null>(null);
-  const [resultImageUrl, setResultImageUrl] = useState<string | null>(null);
-  const [participantId, setParticipantId] = useState<string | null>(null);
+  // Track natural dimensions of attendee photograph and apply smart face centering
+  useEffect(() => {
+    if (!photoPreviewUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth || 1000;
+      const h = img.naturalHeight || 1000;
+      setPhotoNaturalDim({ width: w, height: h });
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+      // Smart face framing: If vertical portrait (phone camera 3:4 or 9:16),
+      // the face is in the top 30%. Defaulting offsetY to +0.12 frames the face naturally
+      // rather than cutting off the head and showing only chest/suit.
+      if (h > w * 1.15) {
+        setPanOffset((prev) => (prev.y === 0 ? { x: 0, y: 0.12 } : prev));
+      }
+    };
+    img.src = photoPreviewUrl;
+  }, [photoPreviewUrl]);
 
-  const handlePhotoMouseDown = (e: React.MouseEvent) => {
+  // Pointer event handlers with capture for silky-smooth drag on mouse and mobile touch
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
     setIsDraggingPhoto(true);
     dragStartRef.current = {
       startX: e.clientX,
@@ -109,46 +143,22 @@ export const ParticipantFlyerPage: React.FC = () => {
     };
   };
 
-  const handlePhotoMouseMove = (e: React.MouseEvent) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDraggingPhoto) return;
-    const currentW = slotDim.width || 140;
-    const currentH = slotDim.height || 140;
+    const sW = slotDim.width || 140;
+    const sH = slotDim.height || 140;
     const dx = e.clientX - dragStartRef.current.startX;
     const dy = e.clientY - dragStartRef.current.startY;
     setPanOffset({
-      x: Math.max(-1.5, Math.min(1.5, Number((dragStartRef.current.origPanX + dx / currentW).toFixed(4)))),
-      y: Math.max(-1.5, Math.min(1.5, Number((dragStartRef.current.origPanY + dy / currentH).toFixed(4)))),
+      x: Math.max(-1.5, Math.min(1.5, Number((dragStartRef.current.origPanX + dx / sW).toFixed(4)))),
+      y: Math.max(-1.5, Math.min(1.5, Number((dragStartRef.current.origPanY + dy / sH).toFixed(4)))),
     });
   };
 
-  const handlePhotoMouseUp = () => {
-    setIsDraggingPhoto(false);
-  };
-
-  const handlePhotoTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length !== 1) return;
-    setIsDraggingPhoto(true);
-    dragStartRef.current = {
-      startX: e.touches[0].clientX,
-      startY: e.touches[0].clientY,
-      origPanX: panOffset.x,
-      origPanY: panOffset.y,
-    };
-  };
-
-  const handlePhotoTouchMove = (e: React.TouchEvent) => {
-    if (!isDraggingPhoto || e.touches.length !== 1) return;
-    const currentW = slotDim.width || 140;
-    const currentH = slotDim.height || 140;
-    const dx = e.touches[0].clientX - dragStartRef.current.startX;
-    const dy = e.touches[0].clientY - dragStartRef.current.startY;
-    setPanOffset({
-      x: Math.max(-1.5, Math.min(1.5, Number((dragStartRef.current.origPanX + dx / currentW).toFixed(4)))),
-      y: Math.max(-1.5, Math.min(1.5, Number((dragStartRef.current.origPanY + dy / currentH).toFixed(4)))),
-    });
-  };
-
-  const handlePhotoTouchEnd = () => {
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
     setIsDraggingPhoto(false);
   };
 
@@ -164,7 +174,6 @@ export const ParticipantFlyerPage: React.FC = () => {
     setNotFound(false);
 
     try {
-      // 1. Ensure initial local data / seed database is loaded on first visit
       await initializeLocalData();
     } catch (err) {
       console.warn('initializeLocalData non-fatal error:', err);
@@ -179,13 +188,9 @@ export const ParticipantFlyerPage: React.FC = () => {
       return;
     }
 
-    // 2. Normalize slug (remove trailing slashes, decode URI, trim)
     const cleanSlug = decodeURIComponent(slug).replace(/\/+$/, '').trim().toLowerCase();
-
-    // 3. Search local storage first
     let ev = db.getEventBySlug(cleanSlug);
 
-    // 4. If not exact match, search by partial slug or ID
     if (!ev) {
       ev = allEvents.find((e) => {
         const s = e.slug.toLowerCase();
@@ -193,7 +198,6 @@ export const ParticipantFlyerPage: React.FC = () => {
       }) || null;
     }
 
-    // 5. If still not found, query Supabase database
     if (!ev) {
       const sb = getSupabase();
       if (sb) {
@@ -222,7 +226,7 @@ export const ParticipantFlyerPage: React.FC = () => {
 
     setEvent(ev);
 
-    // 6. Find or fetch template
+    // Fetch template
     let tmpl = db.getTemplateByEventId(ev.id);
     if (!tmpl) {
       const sb = getSupabase();
@@ -243,7 +247,6 @@ export const ParticipantFlyerPage: React.FC = () => {
       }
     }
 
-    // Fallback template guarantee so flyer customization never crashes
     if (!tmpl) {
       tmpl = {
         id: `tmpl_${ev.id}`,
@@ -253,7 +256,7 @@ export const ParticipantFlyerPage: React.FC = () => {
         photo_width: 0.38,
         photo_height: 0.38,
         photo_shape: 'circle',
-        photo_crop_settings: { zoom: 1, frameScale: 1.0 },
+        photo_crop_settings: { zoom: 1, frameScale: 1.35 },
         name_x: 0.15,
         name_y: 0.725,
         name_width: 0.70,
@@ -261,7 +264,7 @@ export const ParticipantFlyerPage: React.FC = () => {
         font_family: 'Plus Jakarta Sans, sans-serif',
         font_size: 44,
         font_weight: '700',
-        text_color: '#FFFFFF',
+        text_color: '#111126',
         text_alignment: 'center',
         max_lines: 1,
         created_at: new Date().toISOString(),
@@ -271,25 +274,19 @@ export const ParticipantFlyerPage: React.FC = () => {
     }
     setTemplate(tmpl);
 
-    // Auto-detect template parameters and apply optimal centering & spacing
-    if (tmpl.photo_shape === 'circle') {
-      if (tmpl.photo_width <= 0.32) {
-        setFrameScale(tmpl.photo_crop_settings?.frameScale ?? 1.45);
-      } else if (tmpl.photo_crop_settings?.frameScale) {
-        setFrameScale(tmpl.photo_crop_settings.frameScale);
-      }
-      // If template was set higher than the cutout (common default was 0.26-0.28), gently nudge down +4.5% to center in cutout
-      if (tmpl.photo_y <= 0.29) {
-        setFrameOffsetY(0.045);
-      }
+    // Set initial text color from template
+    if (tmpl.text_color) {
+      setSelectedTextColor(tmpl.text_color);
     }
 
-    // If template placed name too close to circle (<= 0.66), offset down by 0.075 so it sits in the designated name badge
-    if (tmpl.name_y <= 0.66) {
-      setNameOffsetY(0.075);
+    // Default frameScale: If circle, use 1.35x to comfortably cover cutout white rings
+    if (tmpl.photo_crop_settings?.frameScale) {
+      setFrameScale(tmpl.photo_crop_settings.frameScale);
+    } else if (tmpl.photo_shape === 'circle') {
+      setFrameScale(1.35);
     }
 
-    // 7. Resolve flyer image source
+    // Resolve flyer source
     let resolved = await resolveFlyerSource(ev.original_flyer_path, ev.original_flyer_data_url);
     if (!resolved || resolved === '') {
       resolved = createSampleFlyerDataUrl('tech');
@@ -342,6 +339,7 @@ export const ParticipantFlyerPage: React.FC = () => {
     setPhotoPreviewUrl(sample);
     setPhotoFile(null);
     setErrorMessage(null);
+    setPanOffset({ x: 0, y: 0.05 });
   };
 
   const handleGenerate = async (e: React.FormEvent) => {
@@ -358,21 +356,20 @@ export const ParticipantFlyerPage: React.FC = () => {
 
     setGenerating(true);
     setErrorMessage(null);
-    setGenerationStep('Analyzing photograph & framing portrait...');
+    setGenerationStep('Framing portrait photograph...');
     setGenerationProgress(25);
 
     try {
-      await new Promise((r) => setTimeout(r, 200));
-      // 1. Upload participant photo or store locally
+      await new Promise((r) => setTimeout(r, 180));
+
       let photoPath = 'sample-portrait';
       if (photoFile) {
-        setGenerationStep('Normalizing image resolution...');
+        setGenerationStep('Processing high-resolution photo...');
         setGenerationProgress(50);
         const uploadRes = await uploadParticipantPhoto(photoFile, event.id);
         photoPath = uploadRes.path;
       }
 
-      // 2. Record participant
       setGenerationStep('Aligning template coordinates...');
       setGenerationProgress(75);
       const newParticipant: Participant = {
@@ -385,11 +382,10 @@ export const ParticipantFlyerPage: React.FC = () => {
       db.addParticipant(newParticipant);
       setParticipantId(newParticipant.id);
 
-      // 3. Composite flyer using client Canvas Engine at native flyer resolution
-      setGenerationStep('Compositing ultra high-res print flyer...');
+      setGenerationStep('Rendering ultra high-res print flyer...');
       setGenerationProgress(90);
 
-      // Direct 1:1 normalized offset coordinates (matches CSS preview)
+      // Render 100% pixel-perfect canvas
       const canvas = await renderPersonalisedFlyer({
         flyerImageUrl: flyerSrc,
         participantImageUrl: photoPreviewUrl,
@@ -403,18 +399,19 @@ export const ParticipantFlyerPage: React.FC = () => {
           frameOffsetX,
           frameOffsetY,
           nameOffsetY,
+          textColor: selectedTextColor,
         },
       });
 
       setGenerationProgress(100);
-      await new Promise((r) => setTimeout(r, 250));
+      await new Promise((r) => setTimeout(r, 200));
 
       setGeneratedCanvas(canvas);
       setResultImageUrl(canvas.toDataURL('image/jpeg', 0.95));
       triggerFlyerCelebration();
     } catch (err: any) {
       console.error(err);
-      setErrorMessage(err.message || 'Error generating your personalized flyer. Please try again.');
+      setErrorMessage(err.message || 'Error generating your personalised flyer. Please try again.');
     } finally {
       setGenerating(false);
       setGenerationProgress(0);
@@ -434,7 +431,6 @@ export const ParticipantFlyerPage: React.FC = () => {
       downloadCanvasAsImage(generatedCanvas, baseName, format);
     }
 
-    // Record download
     db.recordDownload({
       id: `dl_${Date.now()}`,
       participant_id: participantId,
@@ -455,6 +451,8 @@ export const ParticipantFlyerPage: React.FC = () => {
     setPhotoFile(null);
     setPhotoPreviewUrl(null);
     setErrorMessage(null);
+    setPanOffset({ x: 0, y: 0 });
+    setZoom(1.0);
   };
 
   if (loading) {
@@ -526,6 +524,21 @@ export const ParticipantFlyerPage: React.FC = () => {
     );
   }
 
+  // Pre-calculate exact centered frame position for the live preview
+  const baseCenterX = template ? Number(template.photo_x) + Number(template.photo_width) / 2 : 0.5;
+  const baseCenterY = template ? Number(template.photo_y) + Number(template.photo_height) / 2 : 0.5;
+  const currentPhotoW = template ? Number(template.photo_width) * frameScale : 0.38;
+  const currentPhotoH = template ? Number(template.photo_height) * frameScale : 0.38;
+
+  // In circle mode: width is diameter in fraction of width. Radius fraction of height is (currentPhotoW / 2) * flyerAspect.
+  const photoSlotLeft = template?.photo_shape === 'circle'
+    ? (baseCenterX + frameOffsetX - currentPhotoW / 2) * 100
+    : (baseCenterX + frameOffsetX - currentPhotoW / 2) * 100;
+
+  const photoSlotTop = template?.photo_shape === 'circle'
+    ? (baseCenterY + frameOffsetY - (currentPhotoW / 2) * flyerAspect) * 100
+    : (baseCenterY + frameOffsetY - currentPhotoH / 2) * 100;
+
   return (
     <div className="min-h-screen bg-[#F8F8FC] py-8 px-4 sm:px-6 flex flex-col items-center justify-center font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8]">
       {/* Brand Header */}
@@ -533,22 +546,22 @@ export const ParticipantFlyerPage: React.FC = () => {
         <EventraLogo variant="with-tagline" size="md" />
       </div>
 
-      {/* Mobile-first, focused card container */}
-      <div className="w-full max-w-md bg-white rounded-2xl border border-[#E9E8F0] shadow-sm overflow-hidden flex flex-col relative">
+      {/* Main Card Container */}
+      <div className="w-full max-w-lg bg-white rounded-2xl border border-[#E9E8F0] shadow-sm overflow-hidden flex flex-col relative">
         {/* Event Header Banner */}
-        <div className="p-6 border-b border-[#E9E8F0] text-center bg-white relative">
+        <div className="p-5 sm:p-6 border-b border-[#E9E8F0] text-center bg-white relative">
           <span className="text-[10px] font-bold uppercase tracking-wider text-[#6425E8] bg-[#6425E8]/10 px-3 py-1 rounded-full">
-            Personalised Event Flyer
+            Attendee Flyer Creator
           </span>
-          <h1 className="text-lg font-bold text-[#111126] mt-2.5 leading-tight">{event.event_name}</h1>
+          <h1 className="text-xl font-bold text-[#111126] mt-2.5 leading-snug">{event.event_name}</h1>
           <p className="text-xs text-[#73738A] mt-1">
-            Add your name and photograph to generate your custom flyer.
+            Personalise and download your official event attendance flyer.
           </p>
         </div>
 
         {/* Form OR Result View */}
         {!resultImageUrl ? (
-          <form onSubmit={handleGenerate} className="p-6 space-y-5">
+          <form onSubmit={handleGenerate} className="p-5 sm:p-6 space-y-5">
             {errorMessage && (
               <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center space-x-2 animate-scale-up">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -558,8 +571,9 @@ export const ParticipantFlyerPage: React.FC = () => {
 
             {/* Field 1: Full Name */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5">
-                Full Name
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-[#6425E8]" />
+                <span>Full Name</span>
               </label>
               <input
                 type="text"
@@ -567,16 +581,17 @@ export const ParticipantFlyerPage: React.FC = () => {
                 disabled={generating}
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="e.g. John Doe"
-                className="w-full px-4 py-2.5 bg-white border border-[#E9E8F0] rounded-xl text-sm text-[#111126] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition"
+                placeholder="e.g. Marvelous Ndukwe"
+                className="w-full px-4 py-2.5 bg-white border border-[#E9E8F0] rounded-xl text-sm font-semibold text-[#111126] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition"
               />
             </div>
 
-            {/* Field 2: Photograph with Drag & Drop */}
+            {/* Field 2: Photograph Upload & Interactive Framing */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-[#73738A]">
-                  Upload Your Photograph
+                <label className="text-[11px] font-bold uppercase tracking-wider text-[#73738A] flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5 text-[#6425E8]" />
+                  <span>Your Photograph</span>
                 </label>
                 <button
                   type="button"
@@ -603,26 +618,27 @@ export const ParticipantFlyerPage: React.FC = () => {
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all ${
+                  className={`border-2 border-dashed rounded-xl p-6 sm:p-8 flex flex-col items-center justify-center cursor-pointer transition-all ${
                     isDraggingOver
-                      ? 'border-[#6425E8] bg-[#6425E8]/10 scale-[1.02]'
+                      ? 'border-[#6425E8] bg-[#6425E8]/10 scale-[1.01]'
                       : 'border-[#E9E8F0] hover:border-[#6425E8] bg-[#F8F8FC] hover:bg-white'
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-xl bg-[#6425E8]/10 flex items-center justify-center text-[#6425E8] mb-2">
-                    <Camera className="w-5 h-5" />
+                  <div className="w-12 h-12 rounded-2xl bg-[#6425E8]/10 flex items-center justify-center text-[#6425E8] mb-2.5">
+                    <Camera className="w-6 h-6" />
                   </div>
-                  <span className="text-xs font-semibold text-[#111126]">
-                    {isDraggingOver ? 'Drop photo to upload' : 'Click, tap, or drag photo here'}
+                  <span className="text-sm font-bold text-[#111126]">
+                    {isDraggingOver ? 'Drop photograph to upload' : 'Click or tap to upload photo'}
                   </span>
-                  <span className="text-[11px] text-[#73738A] mt-0.5">JPG, PNG, or WebP up to 20MB</span>
+                  <span className="text-[11px] text-[#73738A] mt-1">Supports high-res JPG, PNG, or WebP</span>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-[#E9E8F0] p-4 bg-[#F8F8FC] space-y-3.5 animate-in fade-in duration-200">
-                  <div className="flex items-center justify-between">
+                <div className="space-y-4">
+                  {/* Change Photo Link */}
+                  <div className="flex items-center justify-between px-1">
                     <span className="text-[11px] font-bold text-[#111126] uppercase tracking-wider flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-[#6425E8]" />
-                      <span>Adjust & Zoom Photo</span>
+                      <Move className="w-3.5 h-3.5 text-[#6425E8]" />
+                      <span>Interactive Flyer Preview</span>
                     </span>
                     <button
                       type="button"
@@ -634,439 +650,369 @@ export const ParticipantFlyerPage: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Live Interactive WYSIWYG Flyer Canvas Viewport */}
-                  <div
-                    ref={flyerContainerRef}
-                    className="relative w-full rounded-2xl overflow-hidden border-2 border-[#6425E8]/30 shadow-md bg-slate-900 select-none touch-none mx-auto flex items-center justify-center"
-                    style={{
-                      maxHeight: '420px',
-                    }}
-                  >
-                    {/* The Real Event Flyer Base Image */}
-                    <img
-                      src={flyerSrc}
-                      alt="Event Flyer"
-                      className="w-full h-auto block pointer-events-none select-none max-h-[420px] object-contain mx-auto"
-                    />
-
-                    {/* Overlaid Interactive Photo Frame placed directly on top of flyer cutout */}
-                    {template && (
-                      <div
-                        ref={photoSlotRef}
-                        onMouseDown={handlePhotoMouseDown}
-                        onMouseMove={handlePhotoMouseMove}
-                        onMouseUp={handlePhotoMouseUp}
-                        onMouseLeave={handlePhotoMouseUp}
-                        onTouchStart={handlePhotoTouchStart}
-                        onTouchMove={handlePhotoTouchMove}
-                        onTouchEnd={handlePhotoTouchEnd}
-                        style={{
-                          position: 'absolute',
-                          left: `${(template.photo_x + frameOffsetX) * 100}%`,
-                          top: `${(template.photo_y + frameOffsetY) * 100}%`,
-                          width: `${(template.photo_width * frameScale) * 100}%`,
-                          aspectRatio: '1 / 1',
-                          borderRadius: template.photo_shape === 'circle' ? '9999px' : '12px',
-                          overflow: 'hidden',
-                        }}
-                        className="ring-2 ring-[#6425E8] ring-offset-2 ring-offset-black/50 shadow-2xl cursor-grab active:cursor-grabbing z-10"
-                        title="Drag directly on your photo to center head and face"
-                      >
-                        {(() => {
-                          const naturalW = photoNaturalDim.width || 1000;
-                          const naturalH = photoNaturalDim.height || 1000;
-                          const sW = slotDim.width || 140;
-                          const sH = slotDim.height || 140;
-                          const baseScale = Math.max(sW / naturalW, sH / naturalH);
-                          const renderW = naturalW * baseScale * zoom;
-                          const renderH = naturalH * baseScale * zoom;
-                          const imgLeft = (sW - renderW) / 2 + panOffset.x * sW;
-                          const imgTop = (sH - renderH) / 2 + panOffset.y * sH;
-                          return (
-                            <img
-                              src={photoPreviewUrl}
-                              alt="Framed Portrait"
-                              draggable={false}
-                              style={{
-                                position: 'absolute',
-                                width: `${renderW}px`,
-                                height: `${renderH}px`,
-                                left: `${imgLeft}px`,
-                                top: `${imgTop}px`,
-                                maxWidth: 'none',
-                                maxHeight: 'none',
-                                pointerEvents: 'none',
-                                userSelect: 'none',
-                              }}
-                            />
-                          );
-                        })()}
-                      </div>
-                    )}
-
-                    {/* Live Participant Name rendered directly on Flyer */}
-                    {template && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          left: `${template.name_x * 100}%`,
-                          top: `${(template.name_y + nameOffsetY) * 100}%`,
-                          width: `${template.name_width * 100}%`,
-                          color: template.text_color || '#FFFFFF',
-                          fontFamily: template.font_family,
-                          fontWeight: template.font_weight as any,
-                          textAlign: template.text_alignment || 'center',
-                        }}
-                        className="truncate font-bold text-xs pointer-events-none drop-shadow px-2 z-10"
-                      >
-                        {fullName.trim() || 'Your Name Here'}
-                      </div>
-                    )}
-
-                    {/* Drag Helper Tip Badge */}
-                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-[#111126]/85 backdrop-blur-md text-white text-[10px] font-medium px-3 py-1 rounded-full pointer-events-none shadow flex items-center gap-1.5 z-20 whitespace-nowrap">
-                      <Move className="w-3 h-3 text-[#9638F5]" />
-                      <span>Drag directly on flyer to center head · Zoom to fit</span>
-                    </div>
-                  </div>
-
-                  {/* Zoom Slider and Controls */}
-                  <div className="space-y-2 pt-1 bg-white p-3 rounded-xl border border-[#E9E8F0]">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-[#111126] flex items-center gap-1.5">
-                        <ZoomIn className="w-3.5 h-3.5 text-[#6425E8]" />
-                        <span>Face Zoom</span>
-                      </span>
-                      <span className="font-mono font-bold text-[#6425E8] bg-[#6425E8]/10 px-2 py-0.5 rounded-md">
-                        {Math.round(zoom * 100)}%
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setZoom((prev) => Math.max(1.0, Number((prev - 0.15).toFixed(2))))}
-                        className="w-8 h-8 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-sm shadow-2xs active:scale-95 transition"
-                        title="Zoom Out"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-
-                      <input
-                        type="range"
-                        min="1.0"
-                        max="3.0"
-                        step="0.05"
-                        value={zoom}
-                        onChange={(e) => setZoom(parseFloat(e.target.value))}
-                        className="flex-1 accent-[#6425E8] h-2 bg-[#E9E8F0] rounded-lg cursor-pointer"
+                  {/* 100% WYSIWYG Flyer Preview Box (Exact-Fit Wrapper: Zero Pillarbox / Zero Drift) */}
+                  <div className="w-full flex items-center justify-center bg-slate-950/5 rounded-2xl p-2 sm:p-3 border border-[#E9E8F0]">
+                    <div
+                      className="relative inline-block max-w-full overflow-hidden rounded-xl shadow-lg border border-[#E9E8F0] select-none touch-none bg-slate-900"
+                    >
+                      {/* The Base Flyer Image */}
+                      <img
+                        ref={flyerImgRef}
+                        src={flyerSrc}
+                        alt="Event Flyer"
+                        onLoad={updateFlyerDimensions}
+                        className="block max-h-[440px] w-auto max-w-full h-auto mx-auto select-none pointer-events-none"
                       />
 
-                      <button
-                        type="button"
-                        onClick={() => setZoom((prev) => Math.min(3.0, Number((prev + 0.15).toFixed(2))))}
-                        className="w-8 h-8 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-sm shadow-2xs active:scale-95 transition"
-                        title="Zoom In"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                      {/* Overlaid Interactive Photo Frame positioned with 1:1 Parity */}
+                      {template && (
+                        <div
+                          ref={photoSlotRef}
+                          onPointerDown={handlePointerDown}
+                          onPointerMove={handlePointerMove}
+                          onPointerUp={handlePointerUp}
+                          onPointerCancel={handlePointerUp}
+                          style={{
+                            position: 'absolute',
+                            left: `${photoSlotLeft}%`,
+                            top: `${photoSlotTop}%`,
+                            width: `${currentPhotoW * 100}%`,
+                            aspectRatio: template.photo_shape === 'circle' ? '1 / 1' : undefined,
+                            height: template.photo_shape === 'circle' ? undefined : `${currentPhotoH * 100}%`,
+                            borderRadius: template.photo_shape === 'circle' ? '9999px' : '10px',
+                            overflow: 'hidden',
+                          }}
+                          className="ring-2 ring-[#6425E8] ring-offset-2 ring-offset-black/40 shadow-2xl cursor-grab active:cursor-grabbing z-10 touch-none"
+                          title="Drag directly on your photo to frame face and head"
+                        >
+                          {(() => {
+                            const naturalW = photoNaturalDim.width || 1000;
+                            const naturalH = photoNaturalDim.height || 1000;
+                            const sW = slotDim.width || 140;
+                            const sH = slotDim.height || 140;
+                            const baseScale = Math.max(sW / naturalW, sH / naturalH);
+                            const renderW = naturalW * baseScale * zoom;
+                            const renderH = naturalH * baseScale * zoom;
+                            const imgLeft = (sW - renderW) / 2 + panOffset.x * sW;
+                            const imgTop = (sH - renderH) / 2 + panOffset.y * sH;
+                            return (
+                              <img
+                                src={photoPreviewUrl}
+                                alt="Framed Portrait"
+                                draggable={false}
+                                style={{
+                                  position: 'absolute',
+                                  width: `${renderW}px`,
+                                  height: `${renderH}px`,
+                                  left: `${imgLeft}px`,
+                                  top: `${imgTop}px`,
+                                  maxWidth: 'none',
+                                  maxHeight: 'none',
+                                  pointerEvents: 'none',
+                                  userSelect: 'none',
+                                }}
+                              />
+                            );
+                          })()}
+                        </div>
+                      )}
 
-                    {/* Quick Presets & Reset */}
-                    <div className="flex items-center justify-between pt-1">
-                      <div className="flex gap-1.5">
-                        {[
-                          { label: 'Fit (1x)', val: 1.0 },
-                          { label: 'Portrait (1.3x)', val: 1.3 },
-                          { label: 'Close-Up (1.8x)', val: 1.8 },
-                        ].map((p) => (
-                          <button
-                            key={p.val}
-                            type="button"
-                            onClick={() => setZoom(p.val)}
-                            className={`px-2 py-0.5 text-[10px] font-semibold rounded-md transition ${
-                              Math.abs(zoom - p.val) < 0.05
-                                ? 'bg-[#6425E8] text-white'
-                                : 'bg-[#F8F8FC] border border-[#E9E8F0] text-[#73738A] hover:text-[#111126]'
+                      {/* Participant Name Preview aligned vertically and horizontally */}
+                      {template && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: `${template.name_x * 100}%`,
+                            top: `${(template.name_y + nameOffsetY) * 100}%`,
+                            width: `${template.name_width * 100}%`,
+                            height: `${template.name_height * 100}%`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: template.text_alignment === 'left' ? 'flex-start' : template.text_alignment === 'right' ? 'flex-end' : 'center',
+                            color: selectedTextColor || template.text_color || '#111126',
+                            fontFamily: template.font_family,
+                            fontWeight: template.font_weight as any,
+                          }}
+                          className="pointer-events-none select-none z-10 px-2"
+                        >
+                          <span
+                            style={{
+                              fontSize: `${Math.max(11, Math.min(22, (template.font_size || 42) * (flyerRenderDim.width / 1080)))}px`,
+                              lineHeight: 1.2,
+                            }}
+                            className={`truncate font-bold text-center w-full ${
+                              (selectedTextColor || template.text_color || '#111126').toUpperCase() === '#FFFFFF'
+                                ? 'drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]'
+                                : 'drop-shadow-[0_1px_2px_rgba(255,255,255,0.7)]'
                             }`}
                           >
-                            {p.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setZoom(1.25);
-                          setPanOffset({ x: 0, y: 0 });
-                        }}
-                        className="text-[10px] font-semibold text-[#73788A] hover:text-[#111126] flex items-center gap-1"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Center</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Frame Size / Fill White Space Controls */}
-                  <div className="space-y-2 pt-2 bg-white p-3 rounded-xl border border-[#E9E8F0]">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-[#111126] flex items-center gap-1.5">
-                        <Maximize2 className="w-3.5 h-3.5 text-[#6425E8]" />
-                        <span>Photo Circle Size (Fill White Space)</span>
-                      </span>
-                      <span className="font-mono font-bold text-[#6425E8] bg-[#6425E8]/10 px-2 py-0.5 rounded-md text-[11px]">
-                        {Math.round(frameScale * 100)}% ({frameScale >= 1.3 ? 'Filling Cutout' : 'Standard'})
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setFrameScale((prev) => Math.max(0.8, Number((prev - 0.1).toFixed(2))))}
-                        className="w-8 h-8 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-sm shadow-2xs active:scale-95 transition"
-                        title="Shrink Circle Size"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-
-                      <input
-                        type="range"
-                        min="0.8"
-                        max="2.2"
-                        step="0.05"
-                        value={frameScale}
-                        onChange={(e) => setFrameScale(parseFloat(e.target.value))}
-                        className="flex-1 accent-[#6425E8] h-2 bg-[#E9E8F0] rounded-lg cursor-pointer"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => setFrameScale((prev) => Math.min(2.2, Number((prev + 0.1).toFixed(2))))}
-                        className="w-8 h-8 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-sm shadow-2xs active:scale-95 transition"
-                        title="Expand Circle to Fill Space"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    {/* Quick Presets for Filling White Space */}
-                    <div className="flex items-center justify-between pt-1">
-                      <div className="flex flex-wrap gap-1.5">
-                        {[
-                          { label: 'Normal (1x)', val: 1.0 },
-                          { label: 'Fill Cutout (1.35x)', val: 1.35 },
-                          { label: 'Full White Space (1.45x)', val: 1.45 },
-                          { label: 'Extra Large (1.7x)', val: 1.7 },
-                        ].map((p) => (
-                          <button
-                            key={p.val}
-                            type="button"
-                            onClick={() => setFrameScale(p.val)}
-                            className={`px-2 py-0.5 text-[10px] font-semibold rounded-md transition ${
-                              Math.abs(frameScale - p.val) < 0.04
-                                ? 'bg-[#6425E8] text-white shadow-xs'
-                                : 'bg-[#F8F8FC] border border-[#E9E8F0] text-[#73738A] hover:text-[#111126]'
-                            }`}
-                          >
-                            {p.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setFrameScale(1.0)}
-                        className="text-[10px] font-semibold text-[#73788A] hover:text-[#111126] flex items-center gap-1"
-                        title="Reset circle size"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Reset</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Photo Position & Center Alignment Controls */}
-                  <div className="space-y-2.5 pt-2 bg-white p-3 rounded-xl border border-[#E9E8F0]">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-[#111126] flex items-center gap-1.5">
-                        <Move className="w-3.5 h-3.5 text-[#6425E8]" />
-                        <span>Center Fit & Position Nudge</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFrameOffsetX(0);
-                          setFrameOffsetY(0.045);
-                          setFrameScale(1.35);
-                        }}
-                        className="text-[10px] font-bold text-[#6425E8] bg-[#6425E8]/10 hover:bg-[#6425E8]/20 px-2 py-0.5 rounded-md transition flex items-center gap-1"
-                        title="Snap directly into the flyer circular cutout"
-                      >
-                        <Crosshair className="w-3 h-3" />
-                        <span>Snap to Center</span>
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 text-[11px]">
-                      {/* Vertical Position (Up / Down) */}
-                      <div>
-                        <div className="flex justify-between text-[#73738A] font-semibold mb-1">
-                          <span>Vertical (Y)</span>
-                          <span className="font-mono text-[#111126]">
-                            {frameOffsetY > 0 ? `+${Math.round(frameOffsetY * 100)}%` : `${Math.round(frameOffsetY * 100)}%`}
+                            {fullName.trim() || 'Your Name Here'}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setFrameOffsetY((prev) => Math.max(-0.12, Number((prev - 0.015).toFixed(3))))}
-                            className="w-7 h-7 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-xs"
-                            title="Move Frame Up"
-                          >
-                            ↑
-                          </button>
-                          <input
-                            type="range"
-                            min="-0.10"
-                            max="0.10"
-                            step="0.005"
-                            value={frameOffsetY}
-                            onChange={(e) => setFrameOffsetY(parseFloat(e.target.value))}
-                            className="flex-1 accent-[#6425E8] h-1.5 bg-[#E9E8F0] rounded-lg cursor-pointer"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setFrameOffsetY((prev) => Math.min(0.12, Number((prev + 0.015).toFixed(3))))}
-                            className="w-7 h-7 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-xs"
-                            title="Move Frame Down"
-                          >
-                            ↓
-                          </button>
-                        </div>
-                      </div>
+                      )}
 
-                      {/* Horizontal Position (Left / Right) */}
-                      <div>
-                        <div className="flex justify-between text-[#73738A] font-semibold mb-1">
-                          <span>Horizontal (X)</span>
-                          <span className="font-mono text-[#111126]">
-                            {frameOffsetX > 0 ? `+${Math.round(frameOffsetX * 100)}%` : `${Math.round(frameOffsetX * 100)}%`}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setFrameOffsetX((prev) => Math.max(-0.10, Number((prev - 0.015).toFixed(3))))}
-                            className="w-7 h-7 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-xs"
-                            title="Move Frame Left"
-                          >
-                            ←
-                          </button>
-                          <input
-                            type="range"
-                            min="-0.10"
-                            max="0.10"
-                            step="0.005"
-                            value={frameOffsetX}
-                            onChange={(e) => setFrameOffsetX(parseFloat(e.target.value))}
-                            className="flex-1 accent-[#6425E8] h-1.5 bg-[#E9E8F0] rounded-lg cursor-pointer"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setFrameOffsetX((prev) => Math.min(0.10, Number((prev + 0.015).toFixed(3))))}
-                            className="w-7 h-7 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-xs"
-                            title="Move Frame Right"
-                          >
-                            →
-                          </button>
-                        </div>
+                      {/* Subtle floating instruction badge */}
+                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-[#111126]/85 backdrop-blur-md text-white text-[10px] font-medium px-3 py-1 rounded-full pointer-events-none shadow flex items-center gap-1.5 z-20 whitespace-nowrap">
+                        <Move className="w-3 h-3 text-[#9638F5]" />
+                        <span>Drag photo directly to frame face · Zoom to fit</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Name Spacing & Distance from Circle */}
-                  <div className="space-y-2 pt-2 bg-white p-3 rounded-xl border border-[#E9E8F0]">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-[#111126] flex items-center gap-1.5">
-                        <Type className="w-3.5 h-3.5 text-[#6425E8]" />
-                        <span>Name Distance from Circle</span>
-                      </span>
-                      <span className="font-mono font-bold text-[#6425E8] bg-[#6425E8]/10 px-2 py-0.5 rounded-md text-[11px]">
-                        {nameOffsetY >= 0.06 ? 'Spaced (Roomy)' : nameOffsetY >= 0.03 ? 'Standard Gap' : 'Default'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setNameOffsetY((prev) => Math.max(0.0, Number((prev - 0.015).toFixed(3))))}
-                        className="w-8 h-8 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-sm shadow-2xs active:scale-95 transition"
-                        title="Move Name Closer"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-
-                      <input
-                        type="range"
-                        min="0.0"
-                        max="0.12"
-                        step="0.005"
-                        value={nameOffsetY}
-                        onChange={(e) => setNameOffsetY(parseFloat(e.target.value))}
-                        className="flex-1 accent-[#6425E8] h-2 bg-[#E9E8F0] rounded-lg cursor-pointer"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => setNameOffsetY((prev) => Math.min(0.15, Number((prev + 0.015).toFixed(3))))}
-                        className="w-8 h-8 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-sm shadow-2xs active:scale-95 transition"
-                        title="Push Name Down (Increase Space)"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    {/* Quick Name Spacing Presets */}
-                    <div className="flex items-center justify-between pt-1">
-                      <div className="flex flex-wrap gap-1.5">
-                        {[
-                          { label: 'Standard (+20px)', val: 0.025 },
-                          { label: 'Comfortable (+50px)', val: 0.055 },
-                          { label: 'Lower Badge (+80px)', val: 0.085 },
-                        ].map((p) => (
-                          <button
-                            key={p.val}
-                            type="button"
-                            onClick={() => setNameOffsetY(p.val)}
-                            className={`px-2 py-0.5 text-[10px] font-semibold rounded-md transition ${
-                              Math.abs(nameOffsetY - p.val) < 0.02
-                                ? 'bg-[#6425E8] text-white shadow-xs'
-                                : 'bg-[#F8F8FC] border border-[#E9E8F0] text-[#73738A] hover:text-[#111126]'
-                            }`}
-                          >
-                            {p.label}
-                          </button>
-                        ))}
+                  {/* Clean, Executive Adjustment Controls Bar */}
+                  <div className="bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl p-3.5 space-y-3.5">
+                    {/* Control 1: Zoom & Face Framing */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-[#111126] flex items-center gap-1.5">
+                          <ZoomIn className="w-3.5 h-3.5 text-[#6425E8]" />
+                          <span>Photo Zoom & Framing</span>
+                        </span>
+                        <span className="font-mono font-bold text-[#6425E8] bg-[#6425E8]/10 px-2 py-0.5 rounded-md text-[11px]">
+                          {Math.round(zoom * 100)}%
+                        </span>
                       </div>
 
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setZoom((prev) => Math.max(1.0, Number((prev - 0.15).toFixed(2))))}
+                          className="w-8 h-8 rounded-lg bg-white border border-[#E9E8F0] flex items-center justify-center text-[#73738A] hover:text-[#111126] hover:bg-[#EEF0F6] active:scale-95 transition shadow-2xs"
+                          title="Zoom Out"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+
+                        <input
+                          type="range"
+                          min="1.0"
+                          max="2.8"
+                          step="0.05"
+                          value={zoom}
+                          onChange={(e) => setZoom(parseFloat(e.target.value))}
+                          className="flex-1 accent-[#6425E8] h-2 bg-[#E9E8F0] rounded-lg cursor-pointer"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => setZoom((prev) => Math.min(2.8, Number((prev + 0.15).toFixed(2))))}
+                          className="w-8 h-8 rounded-lg bg-white border border-[#E9E8F0] flex items-center justify-center text-[#73738A] hover:text-[#111126] hover:bg-[#EEF0F6] active:scale-95 transition shadow-2xs"
+                          title="Zoom In"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Quick Framing Presets */}
+                      <div className="flex items-center justify-between pt-0.5">
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setZoom(1.35);
+                              setPanOffset({ x: 0, y: 0.14 });
+                            }}
+                            className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white border border-[#E9E8F0] hover:border-[#6425E8] text-[#111126] transition shadow-2xs"
+                          >
+                            Face Focus
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setZoom(1.15);
+                              setPanOffset({ x: 0, y: 0.08 });
+                            }}
+                            className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white border border-[#E9E8F0] hover:border-[#6425E8] text-[#111126] transition shadow-2xs"
+                          >
+                            Upper Body
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setZoom(1.0);
+                              setPanOffset({ x: 0, y: 0 });
+                            }}
+                            className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white border border-[#E9E8F0] hover:border-[#6425E8] text-[#111126] transition shadow-2xs"
+                          >
+                            Fit All
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setZoom(1.2);
+                            setPanOffset({ x: 0, y: 0.08 });
+                          }}
+                          className="text-[10px] font-semibold text-[#73738A] hover:text-[#111126] flex items-center gap-1"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Reset</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Control 2: Circle Fit (Fill White Space) & Text Color Presets */}
+                    <div className="pt-2 border-t border-[#E9E8F0] grid grid-cols-2 gap-2.5">
+                      {/* Circle Size Presets */}
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5 flex items-center gap-1">
+                          <Maximize2 className="w-3 h-3 text-[#6425E8]" />
+                          <span>Circle Coverage</span>
+                        </span>
+                        <div className="flex gap-1">
+                          {[
+                            { label: 'Fill Cutout', val: 1.35 },
+                            { label: 'Standard', val: 1.0 },
+                            { label: 'Wide', val: 1.5 },
+                          ].map((c) => (
+                            <button
+                              key={c.val}
+                              type="button"
+                              onClick={() => setFrameScale(c.val)}
+                              className={`flex-1 py-1 text-[10px] font-bold rounded-lg transition ${
+                                Math.abs(frameScale - c.val) < 0.05
+                                  ? 'bg-[#6425E8] text-white shadow-2xs'
+                                  : 'bg-white border border-[#E9E8F0] text-[#73738A] hover:text-[#111126]'
+                              }`}
+                            >
+                              {c.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Text Contrast Selector */}
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-[#73738A] mb-1.5 flex items-center gap-1">
+                          <Palette className="w-3 h-3 text-[#6425E8]" />
+                          <span>Name Text Color</span>
+                        </span>
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTextColor('#111126')}
+                            className={`flex-1 py-1 text-[10px] font-bold rounded-lg transition flex items-center justify-center gap-1 ${
+                              selectedTextColor === '#111126'
+                                ? 'bg-[#111126] text-white shadow-2xs'
+                                : 'bg-white border border-[#E9E8F0] text-[#73738A] hover:text-[#111126]'
+                            }`}
+                          >
+                            <span className="w-2 h-2 rounded-full bg-[#111126] border border-white" />
+                            <span>Dark</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTextColor('#FFFFFF')}
+                            className={`flex-1 py-1 text-[10px] font-bold rounded-lg transition flex items-center justify-center gap-1 ${
+                              selectedTextColor === '#FFFFFF'
+                                ? 'bg-[#6425E8] text-white shadow-2xs'
+                                : 'bg-white border border-[#E9E8F0] text-[#73738A] hover:text-[#111126]'
+                            }`}
+                          >
+                            <span className="w-2 h-2 rounded-full bg-white border border-gray-300" />
+                            <span>Light</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Collapsible Advanced Fine-Tuning Drawer */}
+                    <div className="pt-2 border-t border-[#E9E8F0]">
                       <button
                         type="button"
-                        onClick={() => setNameOffsetY(0.05)}
-                        className="text-[10px] font-semibold text-[#73788A] hover:text-[#111126] flex items-center gap-1"
-                        title="Reset to comfortable gap"
+                        onClick={() => setShowAdvancedNudge(!showAdvancedNudge)}
+                        className="w-full flex items-center justify-between text-[11px] font-bold text-[#73738A] hover:text-[#111126] py-0.5 transition"
                       >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Reset</span>
+                        <span className="flex items-center gap-1.5">
+                          <Sliders className="w-3 h-3 text-[#6425E8]" />
+                          <span>Fine-tune alignment & position nudge</span>
+                        </span>
+                        {showAdvancedNudge ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                       </button>
+
+                      {showAdvancedNudge && (
+                        <div className="mt-3 pt-3 border-t border-[#E9E8F0]/80 space-y-2.5 animate-in fade-in duration-150">
+                          <div className="grid grid-cols-2 gap-3 text-[11px]">
+                            {/* Photo Slot Vertical Nudge */}
+                            <div>
+                              <div className="flex justify-between text-[#73738A] font-semibold mb-1">
+                                <span>Photo Slot (Y)</span>
+                                <span className="font-mono text-[#111126]">
+                                  {frameOffsetY > 0 ? `+${Math.round(frameOffsetY * 100)}%` : `${Math.round(frameOffsetY * 100)}%`}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setFrameOffsetY((prev) => Math.max(-0.12, Number((prev - 0.01).toFixed(3))))}
+                                  className="w-7 h-7 rounded-lg bg-white border border-[#E9E8F0] flex items-center justify-center text-[#73738A] hover:text-[#111126] font-bold text-xs"
+                                >
+                                  ↑
+                                </button>
+                                <input
+                                  type="range"
+                                  min="-0.10"
+                                  max="0.10"
+                                  step="0.005"
+                                  value={frameOffsetY}
+                                  onChange={(e) => setFrameOffsetY(parseFloat(e.target.value))}
+                                  className="flex-1 accent-[#6425E8] h-1.5 bg-[#E9E8F0] rounded-lg cursor-pointer"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setFrameOffsetY((prev) => Math.min(0.12, Number((prev + 0.01).toFixed(3))))}
+                                  className="w-7 h-7 rounded-lg bg-white border border-[#E9E8F0] flex items-center justify-center text-[#73738A] hover:text-[#111126] font-bold text-xs"
+                                >
+                                  ↓
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Name Badge Vertical Position */}
+                            <div>
+                              <div className="flex justify-between text-[#73738A] font-semibold mb-1">
+                                <span>Name Position (Y)</span>
+                                <span className="font-mono text-[#111126]">
+                                  {nameOffsetY > 0 ? `+${Math.round(nameOffsetY * 100)}%` : `${Math.round(nameOffsetY * 100)}%`}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setNameOffsetY((prev) => Math.max(-0.05, Number((prev - 0.01).toFixed(3))))}
+                                  className="w-7 h-7 rounded-lg bg-white border border-[#E9E8F0] flex items-center justify-center text-[#73738A] hover:text-[#111126] font-bold text-xs"
+                                >
+                                  ↑
+                                </button>
+                                <input
+                                  type="range"
+                                  min="-0.05"
+                                  max="0.10"
+                                  step="0.005"
+                                  value={nameOffsetY}
+                                  onChange={(e) => setNameOffsetY(parseFloat(e.target.value))}
+                                  className="flex-1 accent-[#6425E8] h-1.5 bg-[#E9E8F0] rounded-lg cursor-pointer"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setNameOffsetY((prev) => Math.min(0.12, Number((prev + 0.01).toFixed(3))))}
+                                  className="w-7 h-7 rounded-lg bg-white border border-[#E9E8F0] flex items-center justify-center text-[#73738A] hover:text-[#111126] font-bold text-xs"
+                                >
+                                  ↓
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Live Generation Progress Indicator */}
+            {/* Live Progress Bar when Generating */}
             {generating && (
               <div className="p-4 bg-[#F8F8FC] border border-[#6425E8]/30 rounded-xl space-y-2 animate-slide-up-fade">
                 <div className="flex items-center justify-between text-xs">
@@ -1094,33 +1040,33 @@ export const ParticipantFlyerPage: React.FC = () => {
               {generating ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Processing High-Res Flyer...</span>
+                  <span>Processing Ultra High-Res Flyer...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4" />
-                  <span>Generate My Flyer</span>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Generate My Official Flyer</span>
                 </>
               )}
             </button>
 
             <div className="text-center">
               <span className="text-[11px] text-[#73738A]">
-                No account required · Generates instantly
+                No account required · Instant high-resolution print download
               </span>
             </div>
           </form>
         ) : (
           /* Result Screen */
-          <div className="p-6 space-y-5 animate-scale-up">
+          <div className="p-5 sm:p-6 space-y-5 animate-scale-up">
             <div className="text-center">
-              <div className="inline-flex items-center space-x-1.5 text-emerald-600 text-xs font-bold mb-2 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+              <div className="inline-flex items-center space-x-1.5 text-emerald-700 text-xs font-bold mb-3 bg-emerald-50 px-3.5 py-1.5 rounded-full border border-emerald-200">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>Your Personalised Flyer is Ready!</span>
+                <span>Your Official Flyer is Ready!</span>
               </div>
 
-              {/* Flyer Display with subtle frame hover */}
-              <div className="rounded-xl overflow-hidden shadow-lg border border-[#E9E8F0] bg-black/5 relative group">
+              {/* Generated Flyer Preview */}
+              <div className="rounded-xl overflow-hidden shadow-xl border border-[#E9E8F0] bg-black/5 relative group max-w-sm mx-auto">
                 <img
                   src={resultImageUrl}
                   alt="Personalised Flyer"
@@ -1131,8 +1077,8 @@ export const ParticipantFlyerPage: React.FC = () => {
 
             {/* Download Options */}
             <div>
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] text-center mb-2">
-                Download Format
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-[#73738A] text-center mb-2.5">
+                Select Download Format
               </span>
 
               <div className="grid grid-cols-3 gap-2">
@@ -1141,7 +1087,7 @@ export const ParticipantFlyerPage: React.FC = () => {
                   className="interactive-btn py-2.5 px-2 bg-[#6425E8] hover:bg-[#4214B8] text-white rounded-xl text-xs font-semibold flex flex-col items-center justify-center space-y-1 shadow-sm transition"
                 >
                   <FileImage className="w-4 h-4" />
-                  <span>{downloadingFormat === 'png' ? 'Saved!' : 'PNG (Hi-Res)'}</span>
+                  <span>{downloadingFormat === 'png' ? 'Downloaded!' : 'PNG (Ultra HD)'}</span>
                 </button>
 
                 <button
@@ -1149,7 +1095,7 @@ export const ParticipantFlyerPage: React.FC = () => {
                   className="interactive-btn py-2.5 px-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] rounded-xl text-xs font-semibold flex flex-col items-center justify-center space-y-1 transition"
                 >
                   <FileImage className="w-4 h-4" />
-                  <span>{downloadingFormat === 'jpg' ? 'Saved!' : 'JPG'}</span>
+                  <span>{downloadingFormat === 'jpg' ? 'Downloaded!' : 'JPG Format'}</span>
                 </button>
 
                 <button
@@ -1157,26 +1103,26 @@ export const ParticipantFlyerPage: React.FC = () => {
                   className="interactive-btn py-2.5 px-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] rounded-xl text-xs font-semibold flex flex-col items-center justify-center space-y-1 transition"
                 >
                   <FileText className="w-4 h-4" />
-                  <span>{downloadingFormat === 'pdf' ? 'Saved!' : 'PDF Document'}</span>
+                  <span>{downloadingFormat === 'pdf' ? 'Downloaded!' : 'PDF Document'}</span>
                 </button>
               </div>
             </div>
 
             {/* Generate Another Option */}
-            <div className="pt-2 border-t border-[#E9E8F0] text-center">
+            <div className="pt-3 border-t border-[#E9E8F0] text-center">
               <button
                 onClick={handleReset}
                 className="interactive-btn text-xs font-medium text-[#73738A] hover:text-[#111126] inline-flex items-center space-x-1.5 py-1.5 transition"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>Create Another Flyer</span>
+                <span>Personalise Another Flyer</span>
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Clean footer */}
+      {/* Clean Footer */}
       <div className="mt-6 text-center text-[11px] text-[#73738A] flex items-center space-x-2">
         <span>Powered by Eventra Create</span>
         <span>·</span>

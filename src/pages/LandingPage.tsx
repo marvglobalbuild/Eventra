@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import confetti from 'canvas-confetti';
 import { 
-  ArrowRight, Sparkles, Upload, MousePointerClick, Download, 
+  ArrowRight, Upload, MousePointerClick, Download, 
   Share2, ShieldCheck, CheckCircle2, Check, Zap, Layers, RefreshCw, Eye,
   Compass, Ticket, QrCode, Image as ImageIcon, Send, Users, ChevronRight,
   Building2, Menu, X, Play
@@ -207,7 +207,7 @@ export const LandingPage: React.FC = () => {
         </div>
 
         <div className="hidden lg:flex items-center gap-2.5 px-4 py-2 bg-white/95 backdrop-blur-md border border-[#E9E8F0] hover:border-[#6425E8]/40 hover:shadow-md rounded-2xl shadow-xs text-sm font-semibold text-[#111126] absolute top-16 lg:top-20 right-4 xl:-right-6 transition-all duration-300 animate-float-delayed group cursor-default animate-fade-in delay-250">
-          <Sparkles className="w-4 h-4 text-[#6425E8] animate-pulse" />
+          <Zap className="w-4 h-4 text-[#6425E8]" />
           <span className="group-hover:text-[#6425E8] transition-colors">High-Resolution Canvas Export</span>
         </div>
 
@@ -411,7 +411,7 @@ export const LandingPage: React.FC = () => {
                     }}
                     className="interactive-btn w-full py-2.5 bg-[#6425E8] hover:bg-[#4214B8] text-white text-center rounded-xl text-sm font-semibold shadow-xs transition flex items-center justify-center space-x-1.5"
                   >
-                    <Sparkles className="w-4 h-4" />
+                    <CheckCircle2 className="w-4 h-4" />
                     <span>Generate My Flyer</span>
                   </button>
                 </div>
@@ -432,7 +432,7 @@ export const LandingPage: React.FC = () => {
             >
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-[#6425E8] uppercase flex items-center gap-1 tracking-wider">
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <CheckCircle2 className="w-3.5 h-3.5" />
                   3. Personalised Flyer
                 </span>
                 <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200">
