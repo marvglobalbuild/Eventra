@@ -978,6 +978,7 @@ export const ParticipantFlyerPage: React.FC = () => {
         <span>·</span>
         <span className="text-[#6425E8] font-semibold">Events. Elevated.</span>
       </div>
+      </main>
     </div>
   );
 };

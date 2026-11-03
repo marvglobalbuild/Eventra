@@ -579,11 +579,6 @@ export const Navbar: React.FC = () => {
                 </div>
               </div>
             )}
-                    Sign Up
-                  </Link>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </header>
