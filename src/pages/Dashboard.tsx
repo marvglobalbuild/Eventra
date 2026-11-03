@@ -3,19 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { db } from '../lib/storage-and-db';
 import { resolveFlyerSource } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { FlyerEvent, OrganisationMember } from '../types/database';
-import { PLATFORM_MODULES } from '../lib/modules';
+import { FlyerEvent, OrganisationMember, Participant, FlyerDownload } from '../types/database';
 import { SupabaseModal } from '../components/SupabaseModal';
-import { ModulePreviewModal } from '../components/ModulePreviewModal';
 import { EventraLogo, EventraLogoSymbol } from '../components/EventraLogo';
 import { 
   Plus, Calendar, Users, Download, ExternalLink, Settings, 
-  LogOut, Copy, Check, Search, Sparkles, Database, Trash2, Edit3, 
-  ArrowRight, ShieldCheck, Layers, BarChart3, Building2, UserPlus,
-  Compass, Ticket, QrCode, Image as ImageIcon, Send, SlidersHorizontal,
-  Clock, CheckCircle2, ChevronDown, Activity, ChevronRight, Menu, X
+  LogOut, Copy, Check, Search, Trash2, Edit3, 
+  Layers, BarChart3, Building2, UserPlus,
+  Compass, LayoutGrid, List, CheckCircle2, ChevronRight, Menu, X,
+  Share2, Shield, RefreshCw, Sparkles, Clock, Globe, ArrowUpRight
 } from 'lucide-react';
-
 
 interface EventWithMetrics extends FlyerEvent {
   participantCount: number;
@@ -23,21 +20,27 @@ interface EventWithMetrics extends FlyerEvent {
   resolvedFlyerUrl?: string;
 }
 
-type DashboardTab = 'overview' | 'events' | 'analytics' | 'team' | 'settings';
+type DashboardTab = 'overview' | 'events' | 'participants' | 'analytics' | 'team' | 'settings';
+type ViewMode = 'grid' | 'table';
+type StatusFilter = 'all' | 'published' | 'draft';
 
 export const Dashboard: React.FC = () => {
-  const { user, profile, currentOrg, organisations, switchOrganisation, signOut, isSupabase } = useAuth();
+  const { user, profile, currentOrg, signOut } = useAuth();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [events, setEvents] = useState<EventWithMetrics[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [downloads, setDownloads] = useState<FlyerDownload[]>([]);
   const [teamMembers, setTeamMembers] = useState<OrganisationMember[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showDbModal, setShowDbModal] = useState(false);
-  const [previewModule, setPreviewModule] = useState<any>(null);
+  const [purgeNotice, setPurgeNotice] = useState<string | null>(null);
 
   // New member modal form state
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -46,24 +49,45 @@ export const Dashboard: React.FC = () => {
   const [newMemberRole, setNewMemberRole] = useState<'admin' | 'event_manager' | 'member'>('event_manager');
 
   // Org settings form state
-  const [orgName, setOrgName] = useState(currentOrg?.name || 'Elevate Experience Group');
+  const [orgName, setOrgName] = useState(currentOrg?.name || 'My Events Workspace');
   const [orgSavedNotice, setOrgSavedNotice] = useState(false);
 
   useEffect(() => {
+    // Purge any legacy dummy mock data automatically on first load
+    db.purgeDummyData();
     loadDashboardData();
-  }, [currentOrg]);
+  }, [currentOrg, user]);
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
 
   const loadDashboardData = async () => {
     setLoading(true);
     const allEvents = db.getEvents();
+    // Strictly scope events to the authenticated user or their active organisation
+    const userEvents = allEvents.filter((ev) => {
+      if (!user) return false;
+      return ev.user_id === user.id || (currentOrg && ev.org_id === currentOrg.id);
+    });
+
     const allParticipants = db.getParticipants();
+    const userParticipants = allParticipants.filter((p) =>
+      userEvents.some((e) => e.id === p.event_id)
+    );
+
     const allDownloads = db.getDownloads();
+    const userDownloads = allDownloads.filter((d) =>
+      userEvents.some((e) => e.id === d.event_id)
+    );
+
     const members = db.getOrgMembers(currentOrg?.id);
 
     const enriched = await Promise.all(
-      allEvents.map(async (ev) => {
-        const pCount = allParticipants.filter((p) => p.event_id === ev.id).length;
-        const dCount = allDownloads.filter((d) => d.event_id === ev.id).length;
+      userEvents.map(async (ev) => {
+        const pCount = userParticipants.filter((p) => p.event_id === ev.id).length;
+        const dCount = userDownloads.filter((d) => d.event_id === ev.id).length;
         const resolvedUrl = await resolveFlyerSource(ev.original_flyer_path, ev.original_flyer_data_url);
 
         return {
@@ -76,30 +100,48 @@ export const Dashboard: React.FC = () => {
     );
 
     setEvents(enriched);
+    setParticipants(userParticipants);
+    setDownloads(userDownloads);
     setTeamMembers(members);
     setLoading(false);
   };
 
   const totalEvents = events.length;
   const publishedEvents = events.filter((e) => e.status === 'published').length;
-  const totalParticipants = events.reduce((acc, curr) => acc + curr.participantCount, 0);
-  const totalDownloads = events.reduce((acc, curr) => acc + curr.downloadCount, 0);
+  const draftEvents = events.filter((e) => e.status === 'draft').length;
+  const totalParticipants = participants.length;
+  const totalDownloads = downloads.length;
+  const conversionRate = totalParticipants > 0 ? Math.round((totalDownloads / totalParticipants) * 100) : 100;
 
-  const filteredEvents = events.filter((ev) =>
-    ev.event_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredEvents = events.filter((ev) => {
+    const matchesSearch = ev.event_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (ev.venue && ev.venue.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      ev.slug.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (statusFilter === 'all') return matchesSearch;
+    return matchesSearch && ev.status === statusFilter;
+  });
 
   const handleCopyLink = (slug: string, id: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}/e/${slug}`);
+    const origin = window.location.origin;
+    const url = `${origin}/e/${slug}`;
+    navigator.clipboard.writeText(url);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
   const handleDeleteEvent = (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+    if (window.confirm(`Are you sure you want to delete the event "${name}"? This cannot be undone.`)) {
       db.deleteEvent(id);
       loadDashboardData();
     }
+  };
+
+  const handlePurgeAllDummyData = () => {
+    const result = db.purgeDummyData();
+    setPurgeNotice(`Workspace cleaned: ${result.removedEvents} test events and ${result.removedParticipants} test participants removed.`);
+    loadDashboardData();
+    setTimeout(() => setPurgeNotice(null), 4000);
   };
 
   const handleAddMember = (e: React.FormEvent) => {
@@ -107,7 +149,7 @@ export const Dashboard: React.FC = () => {
     if (!newMemberName.trim() || !newMemberEmail.trim()) return;
 
     db.addOrgMember({
-      org_id: currentOrg?.id || 'org_elevate_01',
+      org_id: currentOrg?.id || 'org_live_01',
       user_id: `usr_${Date.now()}`,
       full_name: newMemberName.trim(),
       email: newMemberEmail.trim(),
@@ -129,725 +171,450 @@ export const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F8FC] text-[#111126] flex font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8]">
-      {/* Sidebar Navigation */}
-      <aside className="w-64 bg-white border-r border-[#E9E8F0] flex flex-col justify-between hidden md:flex shrink-0">
-        <div className="flex flex-col h-full overflow-y-auto">
-          {/* Logo & Brand Zone */}
-          <div className="h-20 px-6 flex items-center justify-between border-b border-[#E9E8F0] shrink-0">
-            <EventraLogo variant="with-tagline" size="md" />
-          </div>
+    <div className="min-h-screen bg-[#F8F8FC] text-[#111126] flex flex-col font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8]">
+      {/* SaaS Top Header */}
+      <header className="h-16 bg-white border-b border-[#E9E8F0] sticky top-0 z-40 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+        <div className="flex items-center space-x-3 sm:space-x-6">
+          {/* Mobile Menu Trigger */}
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="md:hidden p-2 -ml-2 text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC] rounded-lg transition"
+            aria-label="Toggle navigation"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
 
-          {/* Organisation Card / Switcher */}
-          <div className="p-4 border-b border-[#E9E8F0]">
-            <div className="p-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl flex items-center justify-between">
-              <div className="flex items-center space-x-2.5 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center font-bold text-xs shrink-0">
-                  <Building2 className="w-3.5 h-3.5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-[#111126] truncate">{currentOrg?.name || 'My Organisation'}</p>
-                  <p className="text-[10px] text-[#73738A] uppercase tracking-wider font-semibold">Pro Workspace</p>
-                </div>
-              </div>
+          {/* Brand Logo & Wordmark */}
+          <div 
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center space-x-2.5 cursor-pointer hover:opacity-90 transition"
+          >
+            <EventraLogoSymbol size={28} />
+            <div className="flex flex-col">
+              <span className="font-extrabold tracking-tight text-sm text-[#111126]">EVENTRA</span>
+              <span className="text-[9px] uppercase tracking-wider text-[#73738A] font-medium hidden sm:inline">Events. Elevated.</span>
             </div>
           </div>
 
-          {/* Navigation Links */}
-          <nav className="p-4 space-y-6 flex-1">
-            {/* WORKSPACE */}
+          <div className="h-5 w-px bg-[#E9E8F0] hidden sm:block" />
+
+          {/* Workspace Pill & System Status */}
+          <div className="hidden sm:flex items-center space-x-2">
+            <span className="text-xs font-semibold text-[#111126] truncate max-w-[180px]">
+              {currentOrg?.name || 'Workspace'}
+            </span>
+            <span className="text-[#73738A] text-xs">·</span>
+            <div className="flex items-center space-x-1.5 text-[11px] text-[#73738A] font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Live System</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Global Navigation Tabs (Desktop) */}
+        <nav className="hidden md:flex items-center space-x-1">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
+              activeTab === 'overview'
+                ? 'bg-[#6425E8]/10 text-[#6425E8]'
+                : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
+            }`}
+          >
+            Overview
+          </button>
+          <button
+            onClick={() => setActiveTab('events')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
+              activeTab === 'events'
+                ? 'bg-[#6425E8]/10 text-[#6425E8]'
+                : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
+            }`}
+          >
+            Campaigns ({totalEvents})
+          </button>
+          <button
+            onClick={() => setActiveTab('participants')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
+              activeTab === 'participants'
+                ? 'bg-[#6425E8]/10 text-[#6425E8]'
+                : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
+            }`}
+          >
+            Attendees ({totalParticipants})
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
+              activeTab === 'analytics'
+                ? 'bg-[#6425E8]/10 text-[#6425E8]'
+                : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
+            }`}
+          >
+            Analytics
+          </button>
+          <button
+            onClick={() => setActiveTab('team')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
+              activeTab === 'team'
+                ? 'bg-[#6425E8]/10 text-[#6425E8]'
+                : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
+            }`}
+          >
+            Team
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
+              activeTab === 'settings'
+                ? 'bg-[#6425E8]/10 text-[#6425E8]'
+                : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
+            }`}
+          >
+            Settings
+          </button>
+        </nav>
+
+        {/* Right Action Bar */}
+        <div className="flex items-center space-x-2.5 sm:space-x-3">
+          <button
+            onClick={() => navigate('/create-event')}
+            className="px-3.5 sm:px-4 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer active:scale-[0.98]"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Create Event</span>
+            <span className="sm:hidden">New</span>
+          </button>
+
+          {/* User Profile Avatar & Sign Out */}
+          <div className="flex items-center space-x-2 pl-2 border-l border-[#E9E8F0]">
+            <div 
+              title={profile?.email || 'User'}
+              className="w-8 h-8 rounded-full bg-[#6425E8]/10 text-[#6425E8] border border-[#6425E8]/20 flex items-center justify-center font-bold text-xs"
+            >
+              {(profile?.full_name || 'U').charAt(0).toUpperCase()}
+            </div>
+            <button
+              onClick={handleSignOut}
+              title="Sign Out"
+              className="p-1.5 text-[#73738A] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile Drawer Navigation */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 md:hidden bg-[#111126]/40 backdrop-blur-xs flex">
+          <div className="w-72 bg-white h-full shadow-2xl flex flex-col justify-between">
             <div>
-              <span className="text-[10px] font-bold text-[#73738A] uppercase tracking-wider px-2">
-                Workspace
-              </span>
-              <div className="mt-2 space-y-1">
+              <div className="h-16 px-6 flex items-center justify-between border-b border-[#E9E8F0]">
+                <div className="flex items-center space-x-2.5">
+                  <EventraLogoSymbol size={26} />
+                  <span className="font-extrabold text-sm text-[#111126]">EVENTRA</span>
+                </div>
                 <button
-                  onClick={() => setActiveTab('overview')}
-                  className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition ${
-                    activeTab === 'overview'
-                      ? 'bg-[#6425E8]/10 text-[#6425E8]'
-                      : 'text-[#73738A] hover:bg-[#F8F8FC] hover:text-[#111126]'
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-1.5 text-[#73738A] hover:text-[#111126] rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 border-b border-[#E9E8F0] bg-[#F8F8FC]">
+                <p className="text-xs font-bold text-[#111126] truncate">{currentOrg?.name || 'Workspace'}</p>
+                <p className="text-[10px] text-[#73738A] truncate">{profile?.email || 'User'}</p>
+              </div>
+
+              <div className="p-4 space-y-1">
+                <button
+                  onClick={() => { setActiveTab('overview'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl ${
+                    activeTab === 'overview' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A]'
                   }`}
                 >
                   <Compass className="w-4 h-4" />
                   <span>Overview</span>
                 </button>
-
                 <button
-                  onClick={() => setActiveTab('events')}
-                  className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition ${
-                    activeTab === 'events'
-                      ? 'bg-[#6425E8]/10 text-[#6425E8]'
-                      : 'text-[#73738A] hover:bg-[#F8F8FC] hover:text-[#111126]'
+                  onClick={() => { setActiveTab('events'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl ${
+                    activeTab === 'events' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A]'
                   }`}
                 >
                   <Calendar className="w-4 h-4" />
-                  <span>My Events</span>
+                  <span>Campaigns ({totalEvents})</span>
                 </button>
-
                 <button
-                  onClick={() => navigate('/create-event')}
-                  className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold text-[#73738A] hover:bg-[#F8F8FC] hover:text-[#111126] rounded-xl transition"
+                  onClick={() => { setActiveTab('participants'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl ${
+                    activeTab === 'participants' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A]'
+                  }`}
                 >
-                  <Plus className="w-4 h-4 text-[#6425E8]" />
-                  <span>Create Event</span>
+                  <Users className="w-4 h-4" />
+                  <span>Attendees ({totalParticipants})</span>
                 </button>
-              </div>
-            </div>
-
-            {/* EVENT TOOLS */}
-            <div>
-              <span className="text-[10px] font-bold text-[#73738A] uppercase tracking-wider px-2">
-                Event Tools
-              </span>
-              <div className="mt-2 space-y-1">
-                {/* Eventra Create - Highlighted Core Feature */}
                 <button
-                  onClick={() => setActiveTab('events')}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-[#6425E8] bg-[#6425E8]/5 border border-[#6425E8]/20 rounded-xl"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <Layers className="w-4 h-4 text-[#6425E8]" />
-                    <span>Eventra Create</span>
-                  </div>
-                  <span className="text-[9px] bg-[#6425E8] text-white px-1.5 py-0.5 rounded font-mono">LIVE</span>
-                </button>
-
-                {/* Coming soon modules with informative preview modal */}
-                <button
-                  onClick={() => setPreviewModule(PLATFORM_MODULES.find((m) => m.module_key === 'invitations'))}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-[#73738A] hover:bg-[#F8F8FC] hover:text-[#111126] rounded-xl transition"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <Send className="w-4 h-4 opacity-70" />
-                    <span>Invitations</span>
-                  </div>
-                  <span className="text-[9px] text-[#73738A] bg-[#E9E8F0] px-1.5 py-0.5 rounded">Soon</span>
-                </button>
-
-                <button
-                  onClick={() => setPreviewModule(PLATFORM_MODULES.find((m) => m.module_key === 'registrations'))}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-[#73738A] hover:bg-[#F8F8FC] hover:text-[#111126] rounded-xl transition"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <Ticket className="w-4 h-4 opacity-70" />
-                    <span>Registrations</span>
-                  </div>
-                  <span className="text-[9px] text-[#73738A] bg-[#E9E8F0] px-1.5 py-0.5 rounded">Soon</span>
-                </button>
-
-                <button
-                  onClick={() => setPreviewModule(PLATFORM_MODULES.find((m) => m.module_key === 'check_in'))}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-[#73738A] hover:bg-[#F8F8FC] hover:text-[#111126] rounded-xl transition"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <QrCode className="w-4 h-4 opacity-70" />
-                    <span>Check-in</span>
-                  </div>
-                  <span className="text-[9px] text-[#73738A] bg-[#E9E8F0] px-1.5 py-0.5 rounded">Soon</span>
-                </button>
-
-                <button
-                  onClick={() => setPreviewModule(PLATFORM_MODULES.find((m) => m.module_key === 'media_gallery'))}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-[#73738A] hover:bg-[#F8F8FC] hover:text-[#111126] rounded-xl transition"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <ImageIcon className="w-4 h-4 opacity-70" />
-                    <span>Media Gallery</span>
-                  </div>
-                  <span className="text-[9px] text-[#73738A] bg-[#E9E8F0] px-1.5 py-0.5 rounded">Soon</span>
-                </button>
-              </div>
-            </div>
-
-            {/* MANAGEMENT */}
-            <div>
-              <span className="text-[10px] font-bold text-[#73738A] uppercase tracking-wider px-2">
-                Management
-              </span>
-              <div className="mt-2 space-y-1">
-                <button
-                  onClick={() => setActiveTab('analytics')}
-                  className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition ${
-                    activeTab === 'analytics'
-                      ? 'bg-[#6425E8]/10 text-[#6425E8]'
-                      : 'text-[#73738A] hover:bg-[#F8F8FC] hover:text-[#111126]'
+                  onClick={() => { setActiveTab('analytics'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl ${
+                    activeTab === 'analytics' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A]'
                   }`}
                 >
                   <BarChart3 className="w-4 h-4" />
                   <span>Analytics</span>
                 </button>
-
                 <button
-                  onClick={() => setActiveTab('team')}
-                  className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition ${
-                    activeTab === 'team'
-                      ? 'bg-[#6425E8]/10 text-[#6425E8]'
-                      : 'text-[#73738A] hover:bg-[#F8F8FC] hover:text-[#111126]'
+                  onClick={() => { setActiveTab('team'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl ${
+                    activeTab === 'team' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A]'
                   }`}
                 >
                   <Users className="w-4 h-4" />
-                  <span>Team & Roles</span>
+                  <span>Team</span>
                 </button>
-              </div>
-            </div>
-
-            {/* ACCOUNT */}
-            <div>
-              <span className="text-[10px] font-bold text-[#73738A] uppercase tracking-wider px-2">
-                Account
-              </span>
-              <div className="mt-2 space-y-1">
                 <button
-                  onClick={() => setActiveTab('settings')}
-                  className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition ${
-                    activeTab === 'settings'
-                      ? 'bg-[#6425E8]/10 text-[#6425E8]'
-                      : 'text-[#73738A] hover:bg-[#F8F8FC] hover:text-[#111126]'
+                  onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl ${
+                    activeTab === 'settings' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A]'
                   }`}
                 >
                   <Settings className="w-4 h-4" />
-                  <span>Organisation Settings</span>
+                  <span>Settings</span>
                 </button>
               </div>
             </div>
-          </nav>
 
-
-          {/* User Profile Footer */}
-          <div className="p-4 border-t border-[#E9E8F0]">
-            <div className="flex items-center justify-between">
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-[#111126] truncate">{profile?.full_name || 'Alex Morgan'}</p>
-                <p className="text-[11px] text-[#73738A] truncate">{profile?.email || 'alex.morgan@eventra.io'}</p>
-              </div>
+            <div className="p-4 border-t border-[#E9E8F0]">
               <button
-                onClick={() => signOut()}
-                title="Sign Out"
-                className="p-1.5 hover:bg-rose-50 text-[#73738A] hover:text-rose-600 rounded-lg transition"
+                onClick={handleSignOut}
+                className="w-full flex items-center justify-center space-x-2 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition"
               >
                 <LogOut className="w-4 h-4" />
+                <span>Sign Out</span>
               </button>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* Mobile Navigation Drawer Sheet */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex">
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 bg-[#111126]/60 backdrop-blur-sm transition-opacity"
-            onClick={() => setMobileMenuOpen(false)} 
-          />
-          {/* Drawer container */}
-          <div className="relative w-72 max-w-[85vw] bg-white h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-left duration-200">
-            {/* Drawer Header */}
-            <div className="h-16 px-5 flex items-center justify-between border-b border-[#E9E8F0] shrink-0">
-              <EventraLogo variant="with-tagline" size="sm" />
-              <button
-                onClick={() => setMobileMenuOpen(false)}
-                className="p-1.5 text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC] rounded-lg transition"
-                aria-label="Close menu"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Organisation Card */}
-            <div className="p-4 border-b border-[#E9E8F0] bg-[#F8F8FC] shrink-0">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-7 h-7 rounded-lg bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center font-bold text-xs shrink-0">
-                  <Building2 className="w-3.5 h-3.5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-[#111126] truncate">{currentOrg?.name || 'My Organisation'}</p>
-                  <p className="text-[10px] text-[#73738A] uppercase tracking-wider font-semibold">Pro Workspace</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Nav Links */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
-              <div>
-                <span className="text-[10px] font-bold text-[#73738A] uppercase tracking-wider px-2">
-                  Workspace
-                </span>
-                <div className="mt-2 space-y-1">
-                  <button
-                    onClick={() => { setActiveTab('overview'); setMobileMenuOpen(false); }}
-                    className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition ${
-                      activeTab === 'overview' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A] hover:bg-[#F8F8FC]'
-                    }`}
-                  >
-                    <Compass className="w-4 h-4" />
-                    <span>Overview</span>
-                  </button>
-                  <button
-                    onClick={() => { setActiveTab('events'); setMobileMenuOpen(false); }}
-                    className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition ${
-                      activeTab === 'events' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A] hover:bg-[#F8F8FC]'
-                    }`}
-                  >
-                    <Calendar className="w-4 h-4" />
-                    <span>My Events</span>
-                  </button>
-                  <button
-                    onClick={() => { navigate('/create-event'); setMobileMenuOpen(false); }}
-                    className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold text-[#73738A] hover:bg-[#F8F8FC] rounded-xl transition"
-                  >
-                    <Plus className="w-4 h-4 text-[#6425E8]" />
-                    <span>Create Event</span>
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <span className="text-[10px] font-bold text-[#73738A] uppercase tracking-wider px-2">
-                  Event Tools
-                </span>
-                <div className="mt-2 space-y-1">
-                  <button
-                    onClick={() => { setActiveTab('events'); setMobileMenuOpen(false); }}
-                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-[#6425E8] bg-[#6425E8]/5 border border-[#6425E8]/20 rounded-xl"
-                  >
-                    <div className="flex items-center space-x-2.5">
-                      <Layers className="w-4 h-4 text-[#6425E8]" />
-                      <span>Eventra Create</span>
-                    </div>
-                    <span className="text-[9px] bg-[#6425E8] text-white px-1.5 py-0.5 rounded font-mono">LIVE</span>
-                  </button>
-                  <button
-                    onClick={() => { setPreviewModule(PLATFORM_MODULES.find(m => m.module_key === 'invitations')); setMobileMenuOpen(false); }}
-                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-[#73738A] hover:bg-[#F8F8FC] rounded-xl transition"
-                  >
-                    <div className="flex items-center space-x-2.5">
-                      <Send className="w-4 h-4 opacity-70" />
-                      <span>Invitations</span>
-                    </div>
-                    <span className="text-[9px] text-[#73738A] bg-[#E9E8F0] px-1.5 py-0.5 rounded">Soon</span>
-                  </button>
-                  <button
-                    onClick={() => { setPreviewModule(PLATFORM_MODULES.find(m => m.module_key === 'registrations')); setMobileMenuOpen(false); }}
-                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-[#73738A] hover:bg-[#F8F8FC] rounded-xl transition"
-                  >
-                    <div className="flex items-center space-x-2.5">
-                      <Ticket className="w-4 h-4 opacity-70" />
-                      <span>Registrations</span>
-                    </div>
-                    <span className="text-[9px] text-[#73738A] bg-[#E9E8F0] px-1.5 py-0.5 rounded">Soon</span>
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <span className="text-[10px] font-bold text-[#73738A] uppercase tracking-wider px-2">
-                  Management
-                </span>
-                <div className="mt-2 space-y-1">
-                  <button
-                    onClick={() => { setActiveTab('analytics'); setMobileMenuOpen(false); }}
-                    className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition ${
-                      activeTab === 'analytics' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A] hover:bg-[#F8F8FC]'
-                    }`}
-                  >
-                    <BarChart3 className="w-4 h-4" />
-                    <span>Analytics</span>
-                  </button>
-                  <button
-                    onClick={() => { setActiveTab('team'); setMobileMenuOpen(false); }}
-                    className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition ${
-                      activeTab === 'team' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A] hover:bg-[#F8F8FC]'
-                    }`}
-                  >
-                    <Users className="w-4 h-4" />
-                    <span>Team & Roles</span>
-                  </button>
-                  <button
-                    onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }}
-                    className={`w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition ${
-                      activeTab === 'settings' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A] hover:bg-[#F8F8FC]'
-                    }`}
-                  >
-                    <Settings className="w-4 h-4" />
-                    <span>Organisation Settings</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-
-            {/* Drawer User Footer */}
-            <div className="p-4 border-t border-[#E9E8F0] shrink-0">
-              <div className="flex items-center justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-[#111126] truncate">{profile?.full_name || 'Alex Morgan'}</p>
-                  <p className="text-[11px] text-[#73738A] truncate">{profile?.email || 'alex.morgan@eventra.io'}</p>
-                </div>
-                <button
-                  onClick={() => signOut()}
-                  title="Sign Out"
-                  className="p-1.5 hover:bg-rose-50 text-[#73738A] hover:text-rose-600 rounded-lg transition"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        {/* Top Header */}
-        <header className="h-16 px-4 sm:px-6 lg:px-10 bg-white border-b border-[#E9E8F0] flex items-center justify-between sticky top-0 z-20">
-          <div className="flex items-center space-x-2.5 sm:space-x-4 min-w-0">
-            {/* Hamburger Button on Mobile */}
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 -ml-1 text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC] rounded-xl transition"
-              aria-label="Toggle navigation menu"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-
-            <div className="md:hidden flex items-center space-x-2 shrink-0">
-              <EventraLogoSymbol size={24} />
-              <span className="font-extrabold text-xs tracking-wider text-[#111126]">EVENTRA</span>
+      {/* Main Workspace Body */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Purge Notification Banner if triggered */}
+        {purgeNotice && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+              <span>{purgeNotice}</span>
             </div>
-
-            <div className="hidden md:block">
-              <h2 className="font-bold text-sm text-[#111126] capitalize">
-                {activeTab === 'overview' && 'Platform Overview'}
-                {activeTab === 'events' && 'Event Portfolio & Campaigns'}
-                {activeTab === 'analytics' && 'Operational Analytics & Reports'}
-                {activeTab === 'team' && 'Team & Role-Based Permissions'}
-                {activeTab === 'settings' && 'Organisation Settings'}
-              </h2>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-            <button
-              onClick={() => navigate('/create-event')}
-              className="px-3.5 sm:px-4 py-2 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center space-x-1.5"
-            >
-              <Plus className="w-4 h-4" />
-              <span>New Event</span>
+            <button onClick={() => setPurgeNotice(null)} className="text-emerald-700 hover:text-emerald-900 font-bold text-xs">
+              Dismiss
             </button>
           </div>
-        </header>
+        )}
 
+        {/* TAB 1: OVERVIEW */}
+        {activeTab === 'overview' && (
+          <div className="space-y-8">
+            {/* Header Title Section */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#111126]">
+                  Control Center
+                </h1>
+                <p className="text-xs text-[#73738A] mt-1">
+                  Manage flyer campaigns, monitor participant registrations, and distribute live generation links.
+                </p>
+              </div>
 
+              <div className="flex items-center space-x-2.5">
+                <button
+                  onClick={handlePurgeAllDummyData}
+                  title="Purge legacy dummy mock data"
+                  className="px-3 py-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-xs font-semibold text-[#73738A] hover:text-[#111126] rounded-xl transition flex items-center space-x-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Sync Clean State</span>
+                </button>
+                <button
+                  onClick={() => navigate('/create-event')}
+                  className="px-4 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>New Flyer Campaign</span>
+                </button>
+              </div>
+            </div>
 
-        {/* Content Views */}
-        <div className="p-6 lg:p-10 max-w-6xl w-full mx-auto space-y-8">
-          {/* TAB 1: OVERVIEW */}
-          {activeTab === 'overview' && (
-            <div className="space-y-8">
-              {/* Eventra Hero Banner */}
-              <div className="bg-gradient-to-r from-[#111126] via-[#1E0A52] to-[#4214B8] rounded-2xl p-6 sm:p-8 text-white shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+            {/* KPI Metric Cards (Zero-pill discipline, unboxed, subtle separators) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs">
+                <span className="text-[11px] font-semibold text-[#73738A] uppercase tracking-wider block">
+                  Campaigns
+                </span>
+                <div className="flex items-baseline space-x-2 mt-2">
+                  <span className="text-3xl font-extrabold text-[#111126] font-mono tabular-nums">
+                    {totalEvents}
+                  </span>
+                  <span className="text-xs text-[#73738A]">total events</span>
+                </div>
+                <div className="mt-2 pt-2 border-t border-[#E9E8F0]/70 flex items-center text-[11px] text-[#73738A]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5" />
+                  <span>{publishedEvents} published live</span>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs">
+                <span className="text-[11px] font-semibold text-[#73738A] uppercase tracking-wider block">
+                  Flyers Generated
+                </span>
+                <div className="flex items-baseline space-x-2 mt-2">
+                  <span className="text-3xl font-extrabold text-[#6425E8] font-mono tabular-nums">
+                    {totalParticipants}
+                  </span>
+                  <span className="text-xs text-[#73738A]">participants</span>
+                </div>
+                <div className="mt-2 pt-2 border-t border-[#E9E8F0]/70 flex items-center text-[11px] text-[#73738A]">
+                  <span>Personalized attendee posters</span>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs">
+                <span className="text-[11px] font-semibold text-[#73738A] uppercase tracking-wider block">
+                  Total Downloads
+                </span>
+                <div className="flex items-baseline space-x-2 mt-2">
+                  <span className="text-3xl font-extrabold text-emerald-600 font-mono tabular-nums">
+                    {totalDownloads}
+                  </span>
+                  <span className="text-xs text-[#73738A]">files exported</span>
+                </div>
+                <div className="mt-2 pt-2 border-t border-[#E9E8F0]/70 flex items-center text-[11px] text-[#73738A]">
+                  <span>PNG · JPG · PDF exports</span>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs">
+                <span className="text-[11px] font-semibold text-[#73738A] uppercase tracking-wider block">
+                  Conversion Rate
+                </span>
+                <div className="flex items-baseline space-x-2 mt-2">
+                  <span className="text-3xl font-extrabold text-[#111126] font-mono tabular-nums">
+                    {conversionRate}%
+                  </span>
+                  <span className="text-xs text-[#73738A]">download efficiency</span>
+                </div>
+                <div className="mt-2 pt-2 border-t border-[#E9E8F0]/70 flex items-center text-[11px] text-[#73738A]">
+                  <span className="text-emerald-600 font-semibold">Self-service delivery</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Active Campaigns Section */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-white/15 px-2.5 py-0.5 rounded-full inline-block">
-                      {currentOrg?.name || 'Elevate Experience Group'}
-                    </span>
-                    <span className="text-white/60 text-xs">·</span>
-                    <span className="text-xs text-[#9638F5] font-semibold">Events. Elevated.</span>
-                  </div>
-                  <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-                    Welcome to your Eventra Workspace
-                  </h1>
-                  <p className="text-xs text-white/80 mt-1.5 max-w-xl leading-relaxed">
-                    Personalised flyer generation is live in <strong>Eventra Create</strong>. Manage your events, distribute unique sharing links, and track participant reach.
-                  </p>
+                  <h2 className="text-base font-bold text-[#111126]">Flyer Campaigns</h2>
+                  <p className="text-xs text-[#73738A]">Active self-service flyer portals created in your workspace.</p>
                 </div>
-                <div className="flex items-center gap-3 self-start sm:self-auto shrink-0">
-                  <button
-                    onClick={() => navigate('/create-event')}
-                    className="px-5 py-2.5 bg-white text-[#6425E8] hover:bg-slate-50 font-bold text-xs rounded-xl shadow-md transition flex items-center space-x-1.5"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Create Event</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Metric KPI Cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <div className="interactive-card bg-white p-3.5 sm:p-5 rounded-2xl border border-[#E9E8F0] shadow-sm cursor-default">
-                  <span className="text-[10px] sm:text-[11px] font-bold text-[#73738A] uppercase tracking-wider block truncate">Total Events</span>
-                  <p className="text-xl sm:text-2xl font-extrabold mt-1 text-[#111126] font-mono tabular-nums">{totalEvents}</p>
-                  <p className="text-[10px] sm:text-[11px] text-[#73738A] mt-0.5 truncate">{publishedEvents} published live</p>
-                </div>
-
-                <div className="interactive-card bg-white p-3.5 sm:p-5 rounded-2xl border border-[#E9E8F0] shadow-sm cursor-default">
-                  <span className="text-[10px] sm:text-[11px] font-bold text-[#73738A] uppercase tracking-wider block truncate">Active Campaigns</span>
-                  <p className="text-xl sm:text-2xl font-extrabold mt-1 text-[#6425E8] font-mono tabular-nums">{publishedEvents}</p>
-                  <p className="text-[10px] sm:text-[11px] text-[#73738A] mt-0.5 truncate flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Ready for attendees
-                  </p>
-                </div>
-
-                <div className="interactive-card bg-white p-3.5 sm:p-5 rounded-2xl border border-[#E9E8F0] shadow-sm cursor-default">
-                  <span className="text-[10px] sm:text-[11px] font-bold text-[#73738A] uppercase tracking-wider block truncate">Participants</span>
-                  <p className="text-xl sm:text-2xl font-extrabold mt-1 text-[#111126] font-mono tabular-nums">{totalParticipants}</p>
-                  <p className="text-[10px] sm:text-[11px] text-[#73738A] mt-0.5 truncate">Custom flyers made</p>
-                </div>
-
-                <div className="interactive-card bg-white p-3.5 sm:p-5 rounded-2xl border border-[#E9E8F0] shadow-sm cursor-default">
-                  <span className="text-[10px] sm:text-[11px] font-bold text-[#73738A] uppercase tracking-wider block truncate">Flyer Exports</span>
-                  <p className="text-xl sm:text-2xl font-extrabold mt-1 text-[#16A34A] font-mono tabular-nums">{totalDownloads}</p>
-                  <p className="text-[10px] sm:text-[11px] text-[#73738A] mt-0.5 truncate">PNG, JPG, PDF</p>
-                </div>
-              </div>
-
-              {/* Eventra Create Feature Spotlight Card */}
-              <div className="interactive-card bg-white border border-[#E9E8F0] rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#6425E8] via-[#9638F5] to-emerald-500" />
-                <div className="flex items-start space-x-4">
-                  <div className="w-12 h-12 rounded-2xl bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center shrink-0">
-                    <Layers className="w-6 h-6 animate-pulse" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-sm text-[#111126]">Eventra Create</h3>
-                      <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
-                        Operational
-                      </span>
-                    </div>
-                    <p className="text-xs text-[#73738A] mt-1 max-w-xl leading-relaxed">
-                      Upload your base event flyer, place custom circular or rectangular participant photo cutouts, style the participant name typography, and let your attendees generate their personalised posters in seconds.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
+                {totalEvents > 0 && (
                   <button
                     onClick={() => setActiveTab('events')}
-                    className="interactive-btn px-4 py-2 border border-[#E9E8F0] hover:bg-[#F8F8FC] text-xs font-semibold rounded-xl text-[#111126] transition shadow-xs"
+                    className="text-xs font-semibold text-[#6425E8] hover:text-[#501bc5] flex items-center space-x-1"
                   >
-                    View Flyer Events
-                  </button>
-                  <button
-                    onClick={() => navigate('/create-event')}
-                    className="interactive-btn px-4 py-2 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-semibold rounded-xl shadow-sm transition"
-                  >
-                    Launch Create
-                  </button>
-                </div>
-              </div>
-
-              {/* Recent Events List */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-sm text-[#111126]">Recent Events</h3>
-                  <button
-                    onClick={() => setActiveTab('events')}
-                    className="text-xs font-semibold text-[#6425E8] hover:underline flex items-center gap-1"
-                  >
-                    <span>View all events</span>
+                    <span>View all ({totalEvents})</span>
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>
-                </div>
+                )}
+              </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {totalEvents === 0 ? (
+                /* High-fidelity Empty State for brand new or cleaned workspaces */
+                <div className="bg-white border border-[#E9E8F0] rounded-2xl p-10 sm:p-14 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center mx-auto mb-4">
+                    <Layers className="w-7 h-7" />
+                  </div>
+                  <h3 className="text-base font-bold text-[#111126]">No event campaigns yet</h3>
+                  <p className="text-xs text-[#73738A] max-w-md mx-auto mt-1.5 leading-relaxed">
+                    Your platform is live and clean. Upload your original event poster design, place the designated circular or rectangular photo box and name frame, and share your unique participant link.
+                  </p>
+                  <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <button
+                      onClick={() => navigate('/create-event')}
+                      className="w-full sm:w-auto px-5 py-2.5 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center justify-center space-x-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Upload Your Event Flyer</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                   {events.slice(0, 3).map((ev) => (
                     <div
                       key={ev.id}
-                      className="interactive-card bg-white border border-[#E9E8F0] rounded-2xl overflow-hidden shadow-sm flex flex-col group"
+                      className="bg-white border border-[#E9E8F0] rounded-2xl overflow-hidden shadow-xs hover:border-[#6425E8]/40 transition group flex flex-col"
                     >
-                      <div className="h-44 bg-[#F8F8FC] relative overflow-hidden flex items-center justify-center">
-                        {ev.resolvedFlyerUrl ? (
-                          <img
-                            src={ev.resolvedFlyerUrl}
-                            alt={ev.event_name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
-                          />
-                        ) : (
-                          <Calendar className="w-10 h-10 text-gray-300" />
-                        )}
-                        <div className="absolute top-3 right-3 flex items-center space-x-1.5">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider backdrop-blur-md shadow-sm ${
-                              ev.status === 'published'
-                                ? 'bg-emerald-500/90 text-white'
-                                : 'bg-amber-500/90 text-white'
-                            }`}
-                          >
-                            {ev.status}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="p-5 flex-1 flex flex-col justify-between">
-                        <div>
-                          <h4 className="font-bold text-sm text-[#111126] truncate">{ev.event_name}</h4>
-                          <p className="text-[11px] text-[#73738A] mt-0.5">
-                            {ev.venue || 'Virtual & In-Person'} · {new Date(ev.created_at).toLocaleDateString()}
-                          </p>
-
-                          <div className="flex items-center space-x-4 mt-3 pt-3 border-t border-[#E9E8F0] text-xs text-[#73738A]">
-                            <span className="flex items-center space-x-1">
-                              <Users className="w-3.5 h-3.5 text-[#6425E8]" />
-                              <span className="font-mono tabular-nums font-semibold text-[#111126]">{ev.participantCount}</span>
-                              <span>attendees</span>
-                            </span>
-                            <span className="flex items-center space-x-1">
-                              <Download className="w-3.5 h-3.5 text-[#16A34A]" />
-                              <span className="font-mono tabular-nums font-semibold text-[#111126]">{ev.downloadCount}</span>
-                              <span>downloads</span>
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center space-x-2 mt-4 pt-3 border-t border-[#E9E8F0]">
-                          <button
-                            onClick={() => navigate(`/editor/${ev.id}`)}
-                            className="interactive-btn flex-1 py-1.5 bg-[#F8F8FC] hover:bg-[#EEF0F6] text-[#111126] text-xs font-semibold rounded-xl border border-[#E9E8F0] transition flex items-center justify-center space-x-1"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                            <span>Edit Coordinates</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleCopyLink(ev.slug, ev.id)}
-                            className="interactive-btn p-1.5 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] rounded-xl text-[#73738A] hover:text-[#111126] transition"
-                            title="Copy participant link"
-                          >
-                            {copiedId === ev.id ? <Check className="w-4 h-4 text-emerald-600 animate-scale-up" /> : <Copy className="w-4 h-4" />}
-                          </button>
-
-                          <a
-                            href={`/e/${ev.slug}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="interactive-btn p-1.5 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] rounded-xl text-[#73738A] hover:text-[#6425E8] transition"
-                            title="Open participant page"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: EVENTS (PORTFOLIO) */}
-          {activeTab === 'events' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <h3 className="font-bold text-base text-[#111126]">Event Portfolio</h3>
-                  <p className="text-xs text-[#73738A] mt-0.5">
-                    Configure and publish personalized flyer templates for all your events.
-                  </p>
-                </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
-                  <div className="relative w-full sm:w-64">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#73738A]" />
-                    <input
-                      type="text"
-                      placeholder="Search events..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 bg-white border border-[#E9E8F0] rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#6425E8]/20 focus:border-[#6425E8] transition"
-                    />
-                  </div>
-                  <button
-                    onClick={() => navigate('/create-event')}
-                    className="px-4 py-2 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center justify-center space-x-1.5 shrink-0"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Create Event</span>
-                  </button>
-                </div>
-
-              </div>
-
-              {filteredEvents.length === 0 ? (
-                <div className="bg-white border border-dashed border-[#E9E8F0] rounded-2xl p-12 text-center">
-                  <Calendar className="w-10 h-10 mx-auto text-[#73738A]/40 mb-3" />
-                  <h4 className="font-bold text-sm text-[#111126]">No Events Found</h4>
-                  <p className="text-xs text-[#73738A] mt-1 max-w-sm mx-auto">
-                    Upload an event flyer design to start generating personalized templates for participants.
-                  </p>
-                  <button
-                    onClick={() => navigate('/create-event')}
-                    className="mt-4 px-4 py-2 bg-[#6425E8] text-white text-xs font-semibold rounded-xl shadow-sm"
-                  >
-                    Create Event
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredEvents.map((ev) => (
-                    <div
-                      key={ev.id}
-                      className="bg-white border border-[#E9E8F0] rounded-2xl overflow-hidden shadow-sm flex flex-col hover:shadow-md transition group"
-                    >
+                      {/* Flyer Thumbnail */}
                       <div className="h-48 bg-[#F8F8FC] relative overflow-hidden flex items-center justify-center">
                         {ev.resolvedFlyerUrl ? (
                           <img
                             src={ev.resolvedFlyerUrl}
                             alt={ev.event_name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                            className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
                           />
                         ) : (
-                          <Calendar className="w-10 h-10 text-gray-300" />
+                          <div className="flex flex-col items-center justify-center text-[#73738A]">
+                            <Calendar className="w-8 h-8 opacity-40 mb-1" />
+                            <span className="text-[11px]">Flyer artwork</span>
+                          </div>
                         )}
-                        <div className="absolute top-3 right-3 flex items-center space-x-1.5">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider backdrop-blur-md ${
-                              ev.status === 'published'
-                                ? 'bg-emerald-500/90 text-white'
-                                : 'bg-amber-500/90 text-white'
-                            }`}
-                          >
-                            {ev.status}
+                        <div className="absolute top-3 right-3">
+                          <span className="text-[11px] font-semibold text-[#111126] bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-md shadow-xs flex items-center space-x-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full ${ev.status === 'published' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                            <span className="capitalize">{ev.status}</span>
                           </span>
                         </div>
                       </div>
 
+                      {/* Content */}
                       <div className="p-5 flex-1 flex flex-col justify-between">
                         <div>
-                          <h4 className="font-bold text-sm text-[#111126] truncate">{ev.event_name}</h4>
-                          <p className="text-[11px] text-[#73738A] mt-0.5">
-                            Created {new Date(ev.created_at).toLocaleDateString()}
+                          <h3 className="font-bold text-sm text-[#111126] line-clamp-1">{ev.event_name}</h3>
+                          <p className="text-xs text-[#73738A] mt-1">
+                            {ev.venue ? `${ev.venue} · ` : ''}{new Date(ev.created_at).toLocaleDateString()}
                           </p>
 
-                          <div className="flex items-center space-x-4 mt-3 pt-3 border-t border-[#E9E8F0] text-xs text-[#73738A]">
-                            <span className="flex items-center space-x-1">
+                          {/* Metrics row */}
+                          <div className="mt-3.5 pt-3 border-t border-[#E9E8F0] flex items-center justify-between text-xs text-[#73738A]">
+                            <span className="flex items-center space-x-1.5">
                               <Users className="w-3.5 h-3.5 text-[#6425E8]" />
-                              <span className="font-mono tabular-nums font-semibold text-[#111126]">{ev.participantCount}</span>
+                              <strong className="text-[#111126] font-mono">{ev.participantCount}</strong>
                               <span>attendees</span>
                             </span>
-                            <span className="flex items-center space-x-1">
-                              <Download className="w-3.5 h-3.5 text-[#16A34A]" />
-                              <span className="font-mono tabular-nums font-semibold text-[#111126]">{ev.downloadCount}</span>
+                            <span className="flex items-center space-x-1.5">
+                              <Download className="w-3.5 h-3.5 text-emerald-600" />
+                              <strong className="text-[#111126] font-mono">{ev.downloadCount}</strong>
                               <span>downloads</span>
                             </span>
                           </div>
                         </div>
 
-                        <div className="flex items-center space-x-2 mt-4 pt-3 border-t border-[#E9E8F0]">
+                        {/* Actions */}
+                        <div className="mt-4 pt-3 border-t border-[#E9E8F0] flex items-center space-x-2">
                           <button
                             onClick={() => navigate(`/editor/${ev.id}`)}
-                            className="flex-1 py-2 bg-[#F8F8FC] hover:bg-[#EEF0F6] text-[#111126] text-xs font-semibold rounded-xl border border-[#E9E8F0] transition flex items-center justify-center space-x-1"
+                            className="flex-1 py-2 bg-[#F8F8FC] hover:bg-[#EEF0F6] text-[#111126] text-xs font-semibold rounded-xl border border-[#E9E8F0] transition flex items-center justify-center space-x-1.5"
                           >
-                            <Edit3 className="w-3.5 h-3.5" />
-                            <span>Configure</span>
+                            <Edit3 className="w-3.5 h-3.5 text-[#6425E8]" />
+                            <span>Edit Frames</span>
                           </button>
 
                           <button
                             onClick={() => handleCopyLink(ev.slug, ev.id)}
-                            className="p-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] rounded-xl text-[#73738A] hover:text-[#111126] transition"
                             title="Copy participant link"
+                            className="p-2 bg-white hover:bg-[#F8F8FC] border border-[#E9E8F0] text-[#73738A] hover:text-[#111126] rounded-xl transition"
                           >
                             {copiedId === ev.id ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
                           </button>
@@ -856,19 +623,11 @@ export const Dashboard: React.FC = () => {
                             href={`/e/${ev.slug}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="p-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] rounded-xl text-[#73738A] hover:text-[#6425E8] transition"
-                            title="Open participant page"
+                            title="Open participant link"
+                            className="p-2 bg-white hover:bg-[#F8F8FC] border border-[#E9E8F0] text-[#73738A] hover:text-[#6425E8] rounded-xl transition"
                           >
                             <ExternalLink className="w-4 h-4" />
                           </a>
-
-                          <button
-                            onClick={() => handleDeleteEvent(ev.id, ev.event_name)}
-                            className="p-2 hover:bg-rose-50 rounded-xl text-[#73738A] hover:text-rose-600 transition"
-                            title="Delete event"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
                         </div>
                       </div>
                     </div>
@@ -876,78 +635,342 @@ export const Dashboard: React.FC = () => {
                 </div>
               )}
             </div>
-          )}
 
-          {/* TAB 3: ANALYTICS */}
-          {activeTab === 'analytics' && (
-            <div className="space-y-6">
+            {/* Live Participant Feed */}
+            <div className="bg-white border border-[#E9E8F0] rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-[#111126]">Live Attendee Activity</h3>
+                  <p className="text-xs text-[#73738A]">Participants who have generated and downloaded personalized posters.</p>
+                </div>
+                {participants.length > 0 && (
+                  <button
+                    onClick={() => setActiveTab('participants')}
+                    className="text-xs font-semibold text-[#6425E8] hover:underline"
+                  >
+                    View all attendees
+                  </button>
+                )}
+              </div>
+
+              {participants.length === 0 ? (
+                <div className="py-8 text-center border border-dashed border-[#E9E8F0] rounded-xl bg-[#F8F8FC]/50">
+                  <Users className="w-8 h-8 mx-auto text-[#73738A]/40 mb-2" />
+                  <p className="text-xs font-medium text-[#111126]">Awaiting first attendee</p>
+                  <p className="text-[11px] text-[#73738A] max-w-sm mx-auto mt-1">
+                    When people open your event link, input their names, and upload their photos, their generated flyers will appear here in real-time.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-[#E9E8F0]">
+                  {participants.slice(0, 5).map((part) => {
+                    const event = events.find((e) => e.id === part.event_id);
+                    return (
+                      <div key={part.id} className="py-3 flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-8 h-8 rounded-full bg-[#6425E8]/10 text-[#6425E8] font-bold text-xs flex items-center justify-center">
+                            {part.full_name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-[#111126]">{part.full_name}</p>
+                            <p className="text-[11px] text-[#73738A]">
+                              Generated for <strong>{event?.event_name || 'Event Flyer'}</strong>
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3 text-xs text-[#73738A]">
+                          <span className="text-[11px] font-mono">
+                            {new Date(part.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          {event && (
+                            <a
+                              href={`/e/${event.slug}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[#6425E8] hover:underline text-[11px] font-semibold"
+                            >
+                              Event Link →
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: CAMPAIGNS (FULL EVENTS LIST WITH GRID & TABLE VIEW) */}
+        {activeTab === 'events' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <h3 className="font-bold text-base text-[#111126]">Operational Analytics</h3>
-                <p className="text-xs text-[#73788A] mt-0.5">
-                  Detailed participant generation performance across all active Eventra Create campaigns.
+                <h1 className="text-xl font-bold tracking-tight text-[#111126]">
+                  Event Campaigns ({totalEvents})
+                </h1>
+                <p className="text-xs text-[#73738A] mt-1">
+                  Manage flyer coordinate templates, sharing URLs, and attendee downloads.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-sm">
-                  <span className="text-[11px] font-bold text-[#73738A] uppercase tracking-wider">Average Participants/Event</span>
-                  <p className="text-2xl font-bold mt-1 text-[#111126] font-mono tabular-nums">
-                    {totalEvents > 0 ? (totalParticipants / totalEvents).toFixed(1) : 0}
-                  </p>
-                  <p className="text-[11px] text-[#73738A] mt-1">Attendees per campaign</p>
+              <button
+                onClick={() => navigate('/create-event')}
+                className="px-4 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1.5 self-start sm:self-auto"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create Flyer Campaign</span>
+              </button>
+            </div>
+
+            {/* Filter and Control Toolbar */}
+            <div className="bg-white border border-[#E9E8F0] rounded-2xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center space-x-2">
+                {/* Search */}
+                <div className="relative flex-1 sm:w-64">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#73738A]" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search campaigns..."
+                    className="w-full pl-9 pr-3 py-1.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs focus:outline-none focus:border-[#6425E8] transition"
+                  />
                 </div>
 
-                <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-sm">
-                  <span className="text-[11px] font-bold text-[#73738A] uppercase tracking-wider">Download Conversion Rate</span>
-                  <p className="text-2xl font-bold mt-1 text-[#6425E8] font-mono tabular-nums">
-                    {totalParticipants > 0 ? `${Math.round((totalDownloads / totalParticipants) * 100)}%` : '100%'}
-                  </p>
-                  <p className="text-[11px] text-[#73738A] mt-1">Generated flyers exported</p>
-                </div>
-
-                <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-sm">
-                  <span className="text-[11px] font-bold text-[#73738A] uppercase tracking-wider">Format Distribution</span>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-xs font-semibold px-2 py-1 bg-[#6425E8]/10 text-[#6425E8] rounded-lg">PNG (52%)</span>
-                    <span className="text-xs font-semibold px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg">JPG (31%)</span>
-                    <span className="text-xs font-semibold px-2 py-1 bg-purple-50 text-purple-700 rounded-lg">PDF (17%)</span>
-                  </div>
+                {/* Filter buttons */}
+                <div className="flex items-center space-x-1 border-l border-[#E9E8F0] pl-2">
+                  <button
+                    onClick={() => setStatusFilter('all')}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-lg transition ${
+                      statusFilter === 'all' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A] hover:bg-[#F8F8FC]'
+                    }`}
+                  >
+                    All ({totalEvents})
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('published')}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-lg transition ${
+                      statusFilter === 'published' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A] hover:bg-[#F8F8FC]'
+                    }`}
+                  >
+                    Published ({publishedEvents})
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('draft')}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-lg transition ${
+                      statusFilter === 'draft' ? 'bg-[#6425E8]/10 text-[#6425E8]' : 'text-[#73738A] hover:bg-[#F8F8FC]'
+                    }`}
+                  >
+                    Drafts ({draftEvents})
+                  </button>
                 </div>
               </div>
 
-              {/* Event Performance Breakdown Table */}
-              <div className="bg-white border border-[#E9E8F0] rounded-2xl overflow-hidden shadow-sm">
-                <div className="px-6 py-4 border-b border-[#E9E8F0] bg-[#F8F8FC]">
-                  <h4 className="font-bold text-xs uppercase tracking-wider text-[#73738A]">
-                    Event Performance Ledger
-                  </h4>
-                </div>
+              {/* View Switcher: Grid vs Table */}
+              <div className="flex items-center space-x-1 self-end md:self-auto">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  title="Grid view"
+                  className={`p-1.5 rounded-lg border transition ${
+                    viewMode === 'grid'
+                      ? 'bg-[#6425E8]/10 text-[#6425E8] border-[#6425E8]/20'
+                      : 'bg-white text-[#73738A] border-[#E9E8F0] hover:bg-[#F8F8FC]'
+                  }`}
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('table')}
+                  title="Table view"
+                  className={`p-1.5 rounded-lg border transition ${
+                    viewMode === 'table'
+                      ? 'bg-[#6425E8]/10 text-[#6425E8] border-[#6425E8]/20'
+                      : 'bg-white text-[#73738A] border-[#E9E8F0] hover:bg-[#F8F8FC]'
+                  }`}
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {filteredEvents.length === 0 ? (
+              <div className="bg-white border border-[#E9E8F0] rounded-2xl p-12 text-center">
+                <Calendar className="w-10 h-10 mx-auto text-[#73738A]/40 mb-3" />
+                <h3 className="font-bold text-sm text-[#111126]">No campaigns found</h3>
+                <p className="text-xs text-[#73738A] mt-1 max-w-sm mx-auto">
+                  {searchQuery ? 'Try clearing your search query.' : 'Upload an event flyer design to get started.'}
+                </p>
+                <button
+                  onClick={() => navigate('/create-event')}
+                  className="mt-4 px-4 py-2 bg-[#6425E8] text-white text-xs font-semibold rounded-xl shadow-xs"
+                >
+                  Create Event
+                </button>
+              </div>
+            ) : viewMode === 'grid' ? (
+              /* GRID VIEW */
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredEvents.map((ev) => (
+                  <div
+                    key={ev.id}
+                    className="bg-white border border-[#E9E8F0] rounded-2xl overflow-hidden shadow-xs hover:border-[#6425E8]/40 transition group flex flex-col"
+                  >
+                    <div className="h-48 bg-[#F8F8FC] relative overflow-hidden flex items-center justify-center">
+                      {ev.resolvedFlyerUrl ? (
+                        <img
+                          src={ev.resolvedFlyerUrl}
+                          alt={ev.event_name}
+                          className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
+                        />
+                      ) : (
+                        <Calendar className="w-8 h-8 opacity-30 text-[#73738A]" />
+                      )}
+                      <div className="absolute top-3 right-3">
+                        <span className="text-[11px] font-semibold text-[#111126] bg-white/95 backdrop-blur-xs px-2.5 py-1 rounded-md shadow-xs flex items-center space-x-1.5">
+                          <span className={`w-1.5 h-1.5 rounded-full ${ev.status === 'published' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                          <span className="capitalize">{ev.status}</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-5 flex-1 flex flex-col justify-between">
+                      <div>
+                        <h3 className="font-bold text-sm text-[#111126] line-clamp-1">{ev.event_name}</h3>
+                        <p className="text-xs text-[#73738A] mt-1">
+                          {ev.venue ? `${ev.venue} · ` : ''}{new Date(ev.created_at).toLocaleDateString()}
+                        </p>
+
+                        <div className="mt-3 pt-3 border-t border-[#E9E8F0] flex items-center justify-between text-xs text-[#73738A]">
+                          <span className="flex items-center space-x-1.5">
+                            <Users className="w-3.5 h-3.5 text-[#6425E8]" />
+                            <strong className="text-[#111126] font-mono">{ev.participantCount}</strong>
+                            <span>attendees</span>
+                          </span>
+                          <span className="flex items-center space-x-1.5">
+                            <Download className="w-3.5 h-3.5 text-emerald-600" />
+                            <strong className="text-[#111126] font-mono">{ev.downloadCount}</strong>
+                            <span>downloads</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t border-[#E9E8F0] flex items-center space-x-2">
+                        <button
+                          onClick={() => navigate(`/editor/${ev.id}`)}
+                          className="flex-1 py-2 bg-[#F8F8FC] hover:bg-[#EEF0F6] text-[#111126] text-xs font-semibold rounded-xl border border-[#E9E8F0] transition flex items-center justify-center space-x-1.5"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-[#6425E8]" />
+                          <span>Configure</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleCopyLink(ev.slug, ev.id)}
+                          title="Copy link"
+                          className="p-2 bg-white hover:bg-[#F8F8FC] border border-[#E9E8F0] text-[#73738A] hover:text-[#111126] rounded-xl transition"
+                        >
+                          {copiedId === ev.id ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                        </button>
+
+                        <a
+                          href={`/e/${ev.slug}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="View attendee page"
+                          className="p-2 bg-white hover:bg-[#F8F8FC] border border-[#E9E8F0] text-[#73738A] hover:text-[#6425E8] rounded-xl transition"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+
+                        <button
+                          onClick={() => handleDeleteEvent(ev.id, ev.event_name)}
+                          title="Delete campaign"
+                          className="p-2 hover:bg-rose-50 text-[#73738A] hover:text-rose-600 rounded-xl transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* TABLE VIEW (Dense SaaS table) */
+              <div className="bg-white border border-[#E9E8F0] rounded-2xl overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
-                      <tr className="border-b border-[#E9E8F0] text-[#73738A] bg-white font-semibold">
-                        <th className="px-6 py-3">Event Name</th>
-                        <th className="px-6 py-3">Status</th>
-                        <th className="px-6 py-3">Participants</th>
-                        <th className="px-6 py-3">Downloads</th>
-                        <th className="px-6 py-3">Created</th>
+                      <tr className="border-b border-[#E9E8F0] text-[#73738A] bg-[#F8F8FC] font-semibold">
+                        <th className="px-6 py-3.5">Campaign Name</th>
+                        <th className="px-6 py-3.5">Status</th>
+                        <th className="px-6 py-3.5">Sharing URL</th>
+                        <th className="px-6 py-3.5">Attendees</th>
+                        <th className="px-6 py-3.5">Downloads</th>
+                        <th className="px-6 py-3.5">Created</th>
+                        <th className="px-6 py-3.5 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E9E8F0]">
-                      {events.map((e) => (
-                        <tr key={e.id} className="hover:bg-[#F8F8FC] transition">
-                          <td className="px-6 py-3.5 font-bold text-[#111126]">{e.event_name}</td>
-                          <td className="px-6 py-3.5">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                              e.status === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                            }`}>
-                              {e.status}
+                      {filteredEvents.map((ev) => (
+                        <tr key={ev.id} className="hover:bg-[#F8F8FC]/60 transition">
+                          <td className="px-6 py-4 font-bold text-[#111126]">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] overflow-hidden shrink-0 flex items-center justify-center">
+                                {ev.resolvedFlyerUrl ? (
+                                  <img src={ev.resolvedFlyerUrl} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <Calendar className="w-4 h-4 text-[#73738A]" />
+                                )}
+                              </div>
+                              <span className="truncate max-w-[200px]">{ev.event_name}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="inline-flex items-center space-x-1.5 text-xs text-[#111126]">
+                              <span className={`w-1.5 h-1.5 rounded-full ${ev.status === 'published' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                              <span className="capitalize">{ev.status}</span>
                             </span>
                           </td>
-                          <td className="px-6 py-3.5 font-mono tabular-nums">{e.participantCount}</td>
-                          <td className="px-6 py-3.5 font-mono tabular-nums">{e.downloadCount}</td>
-                          <td className="px-6 py-3.5 text-[#73738A] font-mono tabular-nums">
-                            {new Date(e.created_at).toLocaleDateString()}
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={() => handleCopyLink(ev.slug, ev.id)}
+                              className="font-mono text-[11px] text-[#6425E8] hover:underline flex items-center space-x-1"
+                            >
+                              <span>/e/{ev.slug}</span>
+                              {copiedId === ev.id ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 opacity-60" />}
+                            </button>
+                          </td>
+                          <td className="px-6 py-4 font-mono tabular-nums">{ev.participantCount}</td>
+                          <td className="px-6 py-4 font-mono tabular-nums">{ev.downloadCount}</td>
+                          <td className="px-6 py-4 text-[#73738A] font-mono tabular-nums">
+                            {new Date(ev.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end space-x-1.5">
+                              <button
+                                onClick={() => navigate(`/editor/${ev.id}`)}
+                                className="px-2.5 py-1 bg-[#F8F8FC] hover:bg-[#EEF0F6] text-[#111126] font-semibold rounded-lg border border-[#E9E8F0]"
+                              >
+                                Edit
+                              </button>
+                              <a
+                                href={`/e/${ev.slug}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1 text-[#73738A] hover:text-[#6425E8]"
+                                title="Open link"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </a>
+                              <button
+                                onClick={() => handleDeleteEvent(ev.id, ev.event_name)}
+                                className="p-1 text-[#73738A] hover:text-rose-600"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -955,179 +978,297 @@ export const Dashboard: React.FC = () => {
                   </table>
                 </div>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: ATTENDEES DIRECTORY */}
+        {activeTab === 'participants' && (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-[#111126]">
+                Attendee Directory ({totalParticipants})
+              </h1>
+              <p className="text-xs text-[#73738A] mt-1">
+                Real-time record of participants who have customized and downloaded event flyers.
+              </p>
             </div>
-          )}
 
-          {/* TAB 4: TEAM & ORGANISATION */}
-          {activeTab === 'team' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <h3 className="font-bold text-base text-[#111126]">Team & Role-Based Permissions</h3>
-                  <p className="text-xs text-[#73738A] mt-0.5">
-                    Manage team members under <strong>{currentOrg?.name}</strong> and assign role capabilities.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowAddMemberModal(true)}
-                  className="px-4 py-2 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center space-x-1.5 self-start sm:self-auto"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span>Invite Member</span>
-                </button>
-              </div>
-
-              <div className="bg-white border border-[#E9E8F0] rounded-2xl overflow-hidden shadow-sm">
-                <div className="divide-y divide-[#E9E8F0]">
-                  {teamMembers.map((member) => (
-                    <div key={member.id} className="p-5 flex items-center justify-between hover:bg-[#F8F8FC] transition">
-                      <div className="flex items-center space-x-3.5">
-                        <div className="w-9 h-9 rounded-full bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center font-bold text-xs">
-                          {member.full_name.split(' ').map((n) => n[0]).join('')}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-[#111126]">{member.full_name}</p>
-                          <p className="text-[11px] text-[#73738A]">{member.email}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-3">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
-                          member.role === 'owner'
-                            ? 'bg-purple-100 text-[#4214B8]'
-                            : member.role === 'admin'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}>
-                          {member.role.replace('_', ' ')}
-                        </span>
-
-                        {member.role !== 'owner' && (
-                          <button
-                            onClick={() => {
-                              db.removeOrgMember(member.id);
-                              loadDashboardData();
-                            }}
-                            className="p-1.5 hover:bg-rose-50 text-[#73738A] hover:text-rose-600 rounded-lg transition"
-                            title="Remove member"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 5: ORGANISATION SETTINGS */}
-          {activeTab === 'settings' && (
-            <div className="space-y-6 max-w-xl">
-              <div>
-                <h3 className="font-bold text-base text-[#111126]">Organisation Profile & Branding</h3>
-                <p className="text-xs text-[#73738A] mt-0.5">
-                  Update your organization identity, timezones, and account defaults.
+            {participants.length === 0 ? (
+              <div className="bg-white border border-[#E9E8F0] rounded-2xl p-12 text-center">
+                <Users className="w-10 h-10 mx-auto text-[#73738A]/40 mb-3" />
+                <h3 className="font-bold text-sm text-[#111126]">No attendee generations yet</h3>
+                <p className="text-xs text-[#73738A] mt-1 max-w-sm mx-auto">
+                  When participants generate customized flyers through your public links, their names and records appear here.
                 </p>
               </div>
-
-              <div className="bg-white border border-[#E9E8F0] rounded-2xl p-6 shadow-sm">
-                <form onSubmit={handleSaveOrgSettings} className="space-y-4">
-                  {orgSavedNotice && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Organisation details saved successfully.</span>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#73738A] uppercase tracking-wider mb-1.5">
-                      Organisation Name
-                    </label>
-                    <input
-                      type="text"
-                      value={orgName}
-                      onChange={(e) => setOrgName(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:outline-none focus:border-[#6425E8]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#73738A] uppercase tracking-wider mb-1.5">
-                      Workspace Identifier / Slug
-                    </label>
-                    <input
-                      type="text"
-                      readOnly
-                      value={currentOrg?.slug || 'elevate-group'}
-                      className="w-full px-3.5 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs font-mono text-[#73738A]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#73738A] uppercase tracking-wider mb-1.5">
-                      Primary Subscription Plan
-                    </label>
-                    <div className="p-3 bg-[#6425E8]/5 border border-[#6425E8]/20 rounded-xl flex items-center justify-between">
-                      <div>
-                        <span className="font-bold text-xs text-[#6425E8] uppercase tracking-wider">Eventra Professional</span>
-                        <p className="text-[11px] text-[#73738A] mt-0.5">Includes unlimited flyer campaigns & high-res exports</p>
-                      </div>
-                      <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">Active</span>
-                    </div>
-                  </div>
-
-                    <div className="pt-2">
-                      <button
-                        type="submit"
-                        className="px-5 py-2.5 bg-[#6425E8] hover:bg-[#4214B8] text-white font-semibold text-xs rounded-xl shadow-sm transition"
-                      >
-                        Save Changes
-                      </button>
-                    </div>
-                  </form>
-                </div>
-
-                {/* Cloud Database & Storage (Production status) */}
-                <div className="bg-white border border-[#E9E8F0] rounded-2xl p-6 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-bold text-xs text-[#111126] uppercase tracking-wider">Cloud Database & Storage</h4>
-                      <p className="text-[11px] text-[#73738A] mt-0.5">High-speed event ledger and participant asset storage.</p>
-                    </div>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span>Live & Connected</span>
-                    </span>
-                  </div>
-
-                  <div className="p-3 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl flex items-center justify-between text-xs">
-                    <div className="min-w-0 pr-2">
-                      <span className="text-[10px] font-bold text-[#73738A] uppercase tracking-wider block">Production Host</span>
-                      <span className="font-mono text-[#111126] text-[11px] truncate block">qshjupnpxibbvilxgwix.supabase.co</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowDbModal(true)}
-                      className="px-3 py-1.5 border border-[#E9E8F0] hover:bg-white text-xs font-semibold rounded-lg text-[#6425E8] transition shrink-0"
-                    >
-                      Connection Details
-                    </button>
-                  </div>
-                </div>
+            ) : (
+              <div className="bg-white border border-[#E9E8F0] rounded-2xl overflow-hidden shadow-xs">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-[#E9E8F0] text-[#73738A] bg-[#F8F8FC] font-semibold">
+                      <th className="px-6 py-3.5">Participant Name</th>
+                      <th className="px-6 py-3.5">Event Campaign</th>
+                      <th className="px-6 py-3.5">Time Generated</th>
+                      <th className="px-6 py-3.5 text-right">Sharing Route</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E9E8F0]">
+                    {participants.map((p) => {
+                      const ev = events.find((e) => e.id === p.event_id);
+                      return (
+                        <tr key={p.id} className="hover:bg-[#F8F8FC]/60 transition">
+                          <td className="px-6 py-3.5 font-bold text-[#111126]">
+                            <div className="flex items-center space-x-2.5">
+                              <div className="w-7 h-7 rounded-full bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center font-bold text-xs">
+                                {p.full_name.charAt(0).toUpperCase()}
+                              </div>
+                              <span>{p.full_name}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-3.5 text-[#111126] font-medium">
+                            {ev?.event_name || 'Event Flyer'}
+                          </td>
+                          <td className="px-6 py-3.5 text-[#73738A] font-mono tabular-nums">
+                            {new Date(p.created_at).toLocaleString()}
+                          </td>
+                          <td className="px-6 py-3.5 text-right">
+                            {ev && (
+                              <a
+                                href={`/e/${ev.slug}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[#6425E8] hover:underline font-mono text-[11px]"
+                              >
+                                /e/{ev.slug} →
+                              </a>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
+          </div>
+        )}
 
-        </div>
+        {/* TAB 4: ANALYTICS */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-[#111126]">
+                Operational Analytics
+              </h1>
+              <p className="text-xs text-[#73738A] mt-1">
+                Participant engagement metrics and export format distribution.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+              <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs">
+                <span className="text-[11px] font-semibold text-[#73738A] uppercase tracking-wider">
+                  Avg. Participants Per Event
+                </span>
+                <p className="text-2xl font-bold mt-1 text-[#111126] font-mono tabular-nums">
+                  {totalEvents > 0 ? (totalParticipants / totalEvents).toFixed(1) : '0.0'}
+                </p>
+                <p className="text-[11px] text-[#73738A] mt-1">Self-service generated flyers</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs">
+                <span className="text-[11px] font-semibold text-[#73738A] uppercase tracking-wider">
+                  Download Conversion
+                </span>
+                <p className="text-2xl font-bold mt-1 text-[#6425E8] font-mono tabular-nums">
+                  {conversionRate}%
+                </p>
+                <p className="text-[11px] text-[#73738A] mt-1">Attendees who saved their flyer</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs">
+                <span className="text-[11px] font-semibold text-[#73738A] uppercase tracking-wider">
+                  Supported Export Formats
+                </span>
+                <div className="flex items-center space-x-2 mt-2">
+                  <span className="text-xs font-semibold px-2.5 py-1 bg-[#6425E8]/10 text-[#6425E8] rounded-lg">PNG</span>
+                  <span className="text-xs font-semibold px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg">JPG</span>
+                  <span className="text-xs font-semibold px-2.5 py-1 bg-purple-50 text-purple-700 rounded-lg">PDF</span>
+                </div>
+                <p className="text-[11px] text-[#73738A] mt-2">High-res canvas export engine</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: TEAM & ROLES */}
+        {activeTab === 'team' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-xl font-bold tracking-tight text-[#111126]">
+                  Team & Permissions
+                </h1>
+                <p className="text-xs text-[#73738A] mt-1">
+                  Manage collaborators under <strong>{currentOrg?.name}</strong>.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAddMemberModal(true)}
+                className="px-4 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1.5 self-start sm:self-auto"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Invite Member</span>
+              </button>
+            </div>
+
+            <div className="bg-white border border-[#E9E8F0] rounded-2xl overflow-hidden shadow-xs">
+              <div className="divide-y divide-[#E9E8F0]">
+                {teamMembers.map((member) => (
+                  <div key={member.id} className="p-5 flex items-center justify-between hover:bg-[#F8F8FC]/50 transition">
+                    <div className="flex items-center space-x-3.5">
+                      <div className="w-9 h-9 rounded-full bg-[#6425E8]/10 text-[#6425E8] flex items-center justify-center font-bold text-xs">
+                        {member.full_name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-[#111126]">{member.full_name}</p>
+                        <p className="text-[11px] text-[#73738A]">{member.email}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-3">
+                      <span className="text-xs text-[#73738A] font-semibold uppercase tracking-wider">
+                        {member.role.replace('_', ' ')}
+                      </span>
+
+                      {member.role !== 'owner' && (
+                        <button
+                          onClick={() => {
+                            db.removeOrgMember(member.id);
+                            loadDashboardData();
+                          }}
+                          className="p-1.5 hover:bg-rose-50 text-[#73738A] hover:text-rose-600 rounded-lg transition"
+                          title="Remove member"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 6: SETTINGS */}
+        {activeTab === 'settings' && (
+          <div className="space-y-6 max-w-2xl">
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-[#111126]">
+                Workspace Settings
+              </h1>
+              <p className="text-xs text-[#73738A] mt-1">
+                Manage organization identity, storage, and clean live database state.
+              </p>
+            </div>
+
+            <div className="bg-white border border-[#E9E8F0] rounded-2xl p-6 shadow-xs space-y-5">
+              <form onSubmit={handleSaveOrgSettings} className="space-y-4">
+                {orgSavedNotice && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Workspace updated successfully.</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[11px] font-bold text-[#73738A] uppercase tracking-wider mb-1.5">
+                    Workspace Name
+                  </label>
+                  <input
+                    type="text"
+                    value={orgName}
+                    onChange={(e) => setOrgName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-[#E9E8F0] rounded-xl text-xs font-semibold text-[#111126] focus:outline-none focus:border-[#6425E8]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-[#73738A] uppercase tracking-wider mb-1.5">
+                    Plan
+                  </label>
+                  <div className="p-3 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-[#111126]">Eventra Pro</p>
+                      <p className="text-[11px] text-[#73738A]">Unlimited flyer campaigns, canvas processing & exports</p>
+                    </div>
+                    <span className="text-xs text-emerald-600 font-semibold">Active</span>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-[#6425E8] hover:bg-[#501bc5] text-white font-semibold text-xs rounded-xl shadow-xs transition"
+                >
+                  Save Changes
+                </button>
+              </form>
+            </div>
+
+            {/* Cloud Database Connection */}
+            <div className="bg-white border border-[#E9E8F0] rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-xs text-[#111126] uppercase tracking-wider">Cloud Database & Storage</h4>
+                  <p className="text-[11px] text-[#73738A] mt-0.5">High-speed event ledger and participant asset storage.</p>
+                </div>
+                <span className="text-[11px] text-emerald-600 font-semibold flex items-center space-x-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Connected</span>
+                </span>
+              </div>
+
+              <div className="p-3 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-[10px] font-bold text-[#73738A] uppercase tracking-wider block">Production Host</span>
+                  <span className="font-mono text-[#111126] text-[11px]">qshjupnpxibbvilxgwix.supabase.co</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDbModal(true)}
+                  className="px-3 py-1.5 border border-[#E9E8F0] hover:bg-white text-xs font-semibold rounded-lg text-[#6425E8] transition"
+                >
+                  Connection Details
+                </button>
+              </div>
+            </div>
+
+            {/* Danger Zone: Purge Dummy Data */}
+            <div className="bg-white border border-[#E9E8F0] rounded-2xl p-6 shadow-xs space-y-3">
+              <h4 className="font-bold text-xs text-rose-700 uppercase tracking-wider">Data Sanitation</h4>
+              <p className="text-xs text-[#73738A]">
+                Remove any cached test/demo events or sample participants to ensure your live workspace is 100% clean.
+              </p>
+              <button
+                onClick={handlePurgeAllDummyData}
+                className="px-4 py-2 border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Purge Test & Demo Data</span>
+              </button>
+            </div>
+          </div>
+        )}
       </main>
 
-      {/* Add Member Modal */}
+      {/* Invite Member Modal */}
       {showAddMemberModal && (
-        <div className="fixed inset-0 z-50 bg-[#111126]/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-[#111126]/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl border border-[#E9E8F0] shadow-2xl max-w-md w-full p-6">
-            <h3 className="font-bold text-sm text-[#111126] mb-1">Invite Organisation Member</h3>
-            <p className="text-xs text-[#73738A] mb-4">Add a team member to collaborate on event campaigns.</p>
+            <h3 className="font-bold text-sm text-[#111126] mb-1">Invite Team Member</h3>
+            <p className="text-xs text-[#73738A] mb-4">Add a team member to collaborate on event flyer campaigns.</p>
 
             <form onSubmit={handleAddMember} className="space-y-4">
               <div>
@@ -1177,7 +1318,7 @@ export const Dashboard: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#6425E8] hover:bg-[#4214B8] text-white text-xs font-semibold rounded-xl"
+                  className="px-4 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl"
                 >
                   Send Invitation
                 </button>
@@ -1189,9 +1330,6 @@ export const Dashboard: React.FC = () => {
 
       {/* Supabase Config Modal */}
       <SupabaseModal isOpen={showDbModal} onClose={() => setShowDbModal(false)} />
-
-      {/* Future Module Preview Roadmap Modal */}
-      <ModulePreviewModal module={previewModule} onClose={() => setPreviewModule(null)} />
     </div>
   );
 };

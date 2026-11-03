@@ -51,7 +51,6 @@ export const TemplateEditor: React.FC = () => {
 
     const ev = db.getEventById(eventId);
     if (!ev) {
-      alert('Event not found.');
       navigate('/dashboard');
       return;
     }
@@ -672,22 +671,71 @@ export const TemplateEditor: React.FC = () => {
                   </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
+                {/* Host Name Text Color Selector */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-[#73738A]">
-                      Font Color
+                      Name Text Color
                     </label>
-                    <div className="flex items-center space-x-2 mt-1.5">
-                      <input
-                        type="color"
-                        value={template.text_color}
-                        onChange={(e) => handleUpdateTemplate('text_color', e.target.value)}
-                        className="w-8 h-8 rounded border border-[#E9E8F0] cursor-pointer"
-                      />
-                      <span className="text-xs font-mono">{template.text_color}</span>
-                    </div>
+                    <span className="text-xs font-mono font-bold text-[#111126]">{template.text_color}</span>
                   </div>
 
+                  {/* 10 One-Click Color Presets */}
+                  <div className="grid grid-cols-5 gap-2 mb-2.5">
+                    {[
+                      { name: 'White (Dark Flyers)', hex: '#FFFFFF', border: true },
+                      { name: 'Dark Charcoal', hex: '#111126' },
+                      { name: 'Jet Black', hex: '#000000' },
+                      { name: 'Bright Gold', hex: '#F59E0B' },
+                      { name: 'Luxury Amber', hex: '#D97706' },
+                      { name: 'Eventra Purple', hex: '#6425E8' },
+                      { name: 'Crimson Red', hex: '#DC2626' },
+                      { name: 'Burgundy Wine', hex: '#831843' },
+                      { name: 'Emerald', hex: '#047857' },
+                      { name: 'Royal Navy', hex: '#1E3A8A' },
+                    ].map((c) => (
+                      <button
+                        key={c.hex}
+                        type="button"
+                        onClick={() => handleUpdateTemplate('text_color', c.hex)}
+                        title={c.name}
+                        className={`h-7 rounded-lg transition-transform flex items-center justify-center relative ${
+                          template.text_color.toLowerCase() === c.hex.toLowerCase()
+                            ? 'scale-110 ring-2 ring-[#6425E8] shadow-sm'
+                            : 'hover:scale-105 opacity-90 hover:opacity-100'
+                        } ${c.border ? 'border border-[#CBD5E1]' : ''}`}
+                        style={{ backgroundColor: c.hex }}
+                      >
+                        {template.text_color.toLowerCase() === c.hex.toLowerCase() && (
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              c.hex === '#FFFFFF' ? 'bg-[#111126]' : 'bg-white'
+                            }`}
+                          />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Custom Hex Color Picker */}
+                  <div className="flex items-center space-x-2 bg-[#F8F8FC] p-2 rounded-xl border border-[#E9E8F0]">
+                    <input
+                      type="color"
+                      value={template.text_color}
+                      onChange={(e) => handleUpdateTemplate('text_color', e.target.value)}
+                      className="w-7 h-7 rounded border border-[#E9E8F0] cursor-pointer bg-transparent"
+                    />
+                    <input
+                      type="text"
+                      value={template.text_color}
+                      onChange={(e) => handleUpdateTemplate('text_color', e.target.value)}
+                      placeholder="#FFFFFF"
+                      className="flex-1 bg-white border border-[#E9E8F0] rounded-lg px-2.5 py-1 text-xs font-mono text-[#111126] uppercase"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] font-bold uppercase tracking-wider text-[#73738A]">
                       Font Weight
@@ -703,26 +751,61 @@ export const TemplateEditor: React.FC = () => {
                       <option value="800">Extra Bold (800)</option>
                     </select>
                   </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-[#73738A]">
+                      Text Alignment
+                    </label>
+                    <div className="grid grid-cols-3 gap-1 mt-1.5">
+                      {(['left', 'center', 'right'] as const).map((align) => (
+                        <button
+                          key={align}
+                          onClick={() => handleUpdateTemplate('text_alignment', align)}
+                          className={`py-2 text-[11px] font-bold capitalize rounded-xl border transition ${
+                            template.text_alignment === align
+                              ? 'border-[#6425E8] bg-[#6425E8]/10 text-[#6425E8]'
+                              : 'border-[#E9E8F0] text-[#73738A]'
+                          }`}
+                        >
+                          {align}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-[#73738A]">
-                    Text Alignment
-                  </label>
-                  <div className="grid grid-cols-3 gap-2 mt-1.5">
-                    {(['left', 'center', 'right'] as const).map((align) => (
-                      <button
-                        key={align}
-                        onClick={() => handleUpdateTemplate('text_alignment', align)}
-                        className={`py-1.5 text-xs font-semibold capitalize rounded-xl border transition ${
-                          template.text_alignment === align
-                            ? 'border-[#6425E8] bg-[#6425E8]/10 text-[#6425E8]'
-                            : 'border-[#E9E8F0] text-[#73738A]'
-                        }`}
-                      >
-                        {align}
-                      </button>
-                    ))}
+                {/* Name Box Width & Height Bounds */}
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#73738A]">
+                      <span>Name Area Width</span>
+                      <span className="font-mono text-[#111126]">{Math.round(template.name_width * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.2"
+                      max="0.95"
+                      step="0.01"
+                      value={template.name_width}
+                      onChange={(e) => handleUpdateTemplate('name_width', parseFloat(e.target.value))}
+                      className="w-full mt-1.5 accent-[#6425E8]"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#73738A]">
+                      <span>Name Area Height</span>
+                      <span className="font-mono text-[#111126]">{Math.round(template.name_height * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.04"
+                      max="0.16"
+                      step="0.005"
+                      value={template.name_height}
+                      onChange={(e) => handleUpdateTemplate('name_height', parseFloat(e.target.value))}
+                      className="w-full mt-1.5 accent-[#6425E8]"
+                    />
                   </div>
                 </div>
 
@@ -734,7 +817,7 @@ export const TemplateEditor: React.FC = () => {
                   <input
                     type="range"
                     min="0"
-                    max="0.9"
+                    max="0.95"
                     step="0.01"
                     value={template.name_y}
                     onChange={(e) => handleUpdateTemplate('name_y', parseFloat(e.target.value))}
@@ -744,18 +827,23 @@ export const TemplateEditor: React.FC = () => {
 
                 <div>
                   <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#73738A]">
-                    <span>Base Font Size</span>
+                    <span>Max Font Size</span>
                     <span className="font-mono text-[#111126]">{template.font_size}px</span>
                   </div>
                   <input
                     type="range"
                     min="20"
-                    max="80"
+                    max="90"
                     step="2"
                     value={template.font_size}
                     onChange={(e) => handleUpdateTemplate('font_size', parseInt(e.target.value))}
                     className="w-full mt-2 accent-[#6425E8]"
                   />
+                </div>
+
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-[11px] flex items-start gap-2">
+                  <span className="shrink-0 font-bold">✨ Auto-Fit:</span>
+                  <span>Long participant names automatically scale down so they fit perfectly within this box and never overflow.</span>
                 </div>
               </div>
             )}

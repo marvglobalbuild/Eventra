@@ -13,7 +13,8 @@ import { createSamplePortraitDataUrl, createSampleFlyerDataUrl } from '../lib/sa
 import { EventraLogo, EventraLogoSymbol } from '../components/EventraLogo';
 import { 
   Camera, Upload, Download, FileImage, FileText, CheckCircle2, 
-  RefreshCw, Loader2, AlertCircle, Sparkles, ArrowLeft, Shield, Calendar, ChevronRight
+  RefreshCw, Loader2, AlertCircle, Sparkles, ArrowLeft, Shield, Calendar, 
+  ChevronRight, ZoomIn, ZoomOut, Plus, Minus, RotateCcw, Move, Check
 } from 'lucide-react';
 
 export const ParticipantFlyerPage: React.FC = () => {
@@ -38,12 +39,73 @@ export const ParticipantFlyerPage: React.FC = () => {
   const [downloadingFormat, setDownloadingFormat] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Photo Framing & Zoom Controls
+  const [zoom, setZoom] = useState<number>(1.25);
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
+  const dragStartRef = useRef<{ startX: number; startY: number; origPanX: number; origPanY: number }>({
+    startX: 0,
+    startY: 0,
+    origPanX: 0,
+    origPanY: 0,
+  });
+
   // Output Result State
   const [generatedCanvas, setGeneratedCanvas] = useState<HTMLCanvasElement | null>(null);
   const [resultImageUrl, setResultImageUrl] = useState<string | null>(null);
   const [participantId, setParticipantId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingPhoto(true);
+    dragStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origPanX: panOffset.x,
+      origPanY: panOffset.y,
+    };
+  };
+
+  const handlePhotoMouseMove = (e: React.MouseEvent) => {
+    if (!isDraggingPhoto) return;
+    const dx = e.clientX - dragStartRef.current.startX;
+    const dy = e.clientY - dragStartRef.current.startY;
+    setPanOffset({
+      x: Math.max(-120, Math.min(120, dragStartRef.current.origPanX + dx)),
+      y: Math.max(-120, Math.min(120, dragStartRef.current.origPanY + dy)),
+    });
+  };
+
+  const handlePhotoMouseUp = () => {
+    setIsDraggingPhoto(false);
+  };
+
+  const handlePhotoTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    setIsDraggingPhoto(true);
+    dragStartRef.current = {
+      startX: e.touches[0].clientX,
+      startY: e.touches[0].clientY,
+      origPanX: panOffset.x,
+      origPanY: panOffset.y,
+    };
+  };
+
+  const handlePhotoTouchMove = (e: React.TouchEvent) => {
+    if (!isDraggingPhoto || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - dragStartRef.current.startX;
+    const dy = e.touches[0].clientY - dragStartRef.current.startY;
+    setPanOffset({
+      x: Math.max(-120, Math.min(120, dragStartRef.current.origPanX + dx)),
+      y: Math.max(-120, Math.min(120, dragStartRef.current.origPanY + dy)),
+    });
+  };
+
+  const handlePhotoTouchEnd = () => {
+    setIsDraggingPhoto(false);
+  };
 
   useEffect(() => {
     fetchEvent();
@@ -260,11 +322,21 @@ export const ParticipantFlyerPage: React.FC = () => {
       // 3. Composite flyer using client Canvas Engine at native flyer resolution
       setGenerationStep('Compositing ultra high-res print flyer...');
       setGenerationProgress(90);
+
+      // Compute normalized offset coordinates based on preview frame radius (80px radius = 160px width)
+      const normalizedOffsetX = Number((panOffset.x / 80).toFixed(3));
+      const normalizedOffsetY = Number((panOffset.y / 80).toFixed(3));
+
       const canvas = await renderPersonalisedFlyer({
         flyerImageUrl: flyerSrc,
         participantImageUrl: photoPreviewUrl,
         participantName: fullName.trim(),
         template: template,
+        cropSettings: {
+          zoom,
+          offsetX: normalizedOffsetX,
+          offsetY: normalizedOffsetY,
+        },
       });
 
       setGenerationProgress(100);
@@ -479,24 +551,142 @@ export const ParticipantFlyerPage: React.FC = () => {
                   <span className="text-[11px] text-[#73738A] mt-0.5">JPG, PNG, or WebP up to 20MB</span>
                 </div>
               ) : (
-                <div className="rounded-xl border border-[#E9E8F0] p-3 flex items-center space-x-3.5 bg-[#F8F8FC] animate-scale-up">
-                  <img
-                    src={photoPreviewUrl}
-                    alt="Preview"
-                    className="w-14 h-14 rounded-full object-cover border border-[#CBD5E1] shadow-inner"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-[#111126] truncate">
-                      {photoFile?.name || 'Selected Portrait Photo'}
-                    </p>
+                <div className="rounded-2xl border border-[#E9E8F0] p-4 bg-[#F8F8FC] space-y-3.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#111126] uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#6425E8]" />
+                      <span>Adjust & Zoom Photo</span>
+                    </span>
                     <button
                       type="button"
                       disabled={generating}
                       onClick={() => fileInputRef.current?.click()}
-                      className="text-xs font-medium text-[#6425E8] hover:underline mt-0.5"
+                      className="text-xs font-semibold text-[#6425E8] hover:underline"
                     >
                       Change photo
                     </button>
+                  </div>
+
+                  {/* Interactive Framing Viewport matching flyer slot */}
+                  <div
+                    className="relative w-full h-60 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 rounded-xl overflow-hidden flex items-center justify-center select-none touch-none cursor-grab active:cursor-grabbing border border-slate-800 shadow-inner"
+                    onMouseDown={handlePhotoMouseDown}
+                    onMouseMove={handlePhotoMouseMove}
+                    onMouseUp={handlePhotoMouseUp}
+                    onMouseLeave={handlePhotoMouseUp}
+                    onTouchStart={handlePhotoTouchStart}
+                    onTouchMove={handlePhotoTouchMove}
+                    onTouchEnd={handlePhotoTouchEnd}
+                  >
+                    {/* Dimmed backdrop blur */}
+                    <img
+                      src={photoPreviewUrl}
+                      alt="Backdrop"
+                      className="absolute inset-0 w-full h-full object-cover opacity-20 blur-md pointer-events-none"
+                    />
+
+                    {/* Circular or Rectangular Cutout Frame */}
+                    <div
+                      className={`relative w-44 h-44 overflow-hidden ring-4 ring-white shadow-2xl transition-all ${
+                        template?.photo_shape === 'circle' ? 'rounded-full' : 'rounded-2xl'
+                      }`}
+                    >
+                      <img
+                        src={photoPreviewUrl}
+                        alt="Framed Portrait"
+                        draggable={false}
+                        className="w-full h-full object-cover pointer-events-none"
+                        style={{
+                          transform: `scale(${zoom}) translate(${panOffset.x / zoom}px, ${panOffset.y / zoom}px)`,
+                          transformOrigin: 'center center',
+                        }}
+                      />
+                    </div>
+
+                    {/* Drag Helper Tip Badge */}
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-[#111126]/85 backdrop-blur-md text-white text-[10px] font-medium px-3 py-1 rounded-full pointer-events-none shadow flex items-center gap-1.5">
+                      <Move className="w-3 h-3 text-[#9638F5]" />
+                      <span>Drag to center face · Zoom to fill circle</span>
+                    </div>
+                  </div>
+
+                  {/* Zoom Slider and Controls */}
+                  <div className="space-y-2 pt-1 bg-white p-3 rounded-xl border border-[#E9E8F0]">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-[#111126] flex items-center gap-1.5">
+                        <ZoomIn className="w-3.5 h-3.5 text-[#6425E8]" />
+                        <span>Face Zoom</span>
+                      </span>
+                      <span className="font-mono font-bold text-[#6425E8] bg-[#6425E8]/10 px-2 py-0.5 rounded-md">
+                        {Math.round(zoom * 100)}%
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setZoom((prev) => Math.max(1.0, Number((prev - 0.15).toFixed(2))))}
+                        className="w-8 h-8 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-sm shadow-2xs active:scale-95 transition"
+                        title="Zoom Out"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+
+                      <input
+                        type="range"
+                        min="1.0"
+                        max="3.0"
+                        step="0.05"
+                        value={zoom}
+                        onChange={(e) => setZoom(parseFloat(e.target.value))}
+                        className="flex-1 accent-[#6425E8] h-2 bg-[#E9E8F0] rounded-lg cursor-pointer"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setZoom((prev) => Math.min(3.0, Number((prev + 0.15).toFixed(2))))}
+                        className="w-8 h-8 rounded-lg bg-[#F8F8FC] border border-[#E9E8F0] flex items-center justify-center text-[#73788A] hover:text-[#111126] hover:bg-[#EEF0F6] font-bold text-sm shadow-2xs active:scale-95 transition"
+                        title="Zoom In"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Quick Presets & Reset */}
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex gap-1.5">
+                        {[
+                          { label: 'Fit (1x)', val: 1.0 },
+                          { label: 'Portrait (1.3x)', val: 1.3 },
+                          { label: 'Close-Up (1.8x)', val: 1.8 },
+                        ].map((p) => (
+                          <button
+                            key={p.val}
+                            type="button"
+                            onClick={() => setZoom(p.val)}
+                            className={`px-2 py-0.5 text-[10px] font-semibold rounded-md transition ${
+                              Math.abs(zoom - p.val) < 0.05
+                                ? 'bg-[#6425E8] text-white'
+                                : 'bg-[#F8F8FC] border border-[#E9E8F0] text-[#73738A] hover:text-[#111126]'
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setZoom(1.25);
+                          setPanOffset({ x: 0, y: 0 });
+                        }}
+                        className="text-[10px] font-semibold text-[#73788A] hover:text-[#111126] flex items-center gap-1"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Center</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

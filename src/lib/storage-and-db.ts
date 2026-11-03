@@ -90,6 +90,64 @@ const LS_TEMPLATES_KEY = 'eventra_templates_list';
 const LS_PARTICIPANTS_KEY = 'eventra_participants_list';
 const LS_DOWNLOADS_KEY = 'eventra_downloads_list';
 const LS_SUPABASE_CONFIG = 'eventra_supabase_config';
+const LS_AUTH_SESSION = 'eventra_auth_session';
+const LS_ACCOUNTS_KEY = 'eventra_registered_accounts';
+
+export interface StoredAccount {
+  id: string;
+  email: string;
+  password?: string;
+  full_name: string;
+  org_id: string;
+  org_name: string;
+  created_at: string;
+}
+
+export function getStoredAccounts(): StoredAccount[] {
+  const raw = safeLocalStorageGet(LS_ACCOUNTS_KEY);
+  if (!raw) return [];
+  try {
+    const accounts: StoredAccount[] = JSON.parse(raw);
+    // Strip any legacy dummy accounts
+    const realAccounts = accounts.filter(
+      (a) => a.email !== 'alex.morgan@eventra.io' && 
+             a.email !== 'organizer@eventra.io' && 
+             !a.id.startsWith('usr_demo')
+    );
+    if (realAccounts.length !== accounts.length) {
+      safeLocalStorageSet(LS_ACCOUNTS_KEY, JSON.stringify(realAccounts));
+    }
+    return realAccounts;
+  } catch {
+    return [];
+  }
+}
+
+export function saveStoredAccount(account: StoredAccount): void {
+  const accounts = getStoredAccounts();
+  const idx = accounts.findIndex((a) => a.email.toLowerCase() === account.email.toLowerCase());
+  if (idx >= 0) {
+    accounts[idx] = account;
+  } else {
+    accounts.push(account);
+  }
+  safeLocalStorageSet(LS_ACCOUNTS_KEY, JSON.stringify(accounts));
+}
+
+export function getAuthSession(): string | null {
+  return safeLocalStorageGet(LS_AUTH_SESSION);
+}
+
+export function setAuthSession(email: string | null): void {
+  if (email) {
+    safeLocalStorageSet(LS_AUTH_SESSION, email.toLowerCase().trim());
+  } else {
+    try {
+      localStorage.removeItem(LS_AUTH_SESSION);
+    } catch {}
+    memoryKvStore.delete(LS_AUTH_SESSION);
+  }
+}
 
 /**
  * Safe localStorage setter that intercepts QuotaExceededError and performs
@@ -199,17 +257,29 @@ export function saveCustomSupabaseConfig(cfg: SupabaseConfig) {
   safeLocalStorageSet(LS_SUPABASE_CONFIG, JSON.stringify(cfg));
 }
 
-// Seed initial realistic data if clean state, and perform auto-cleanup of legacy quota bloat
+// Seed initial storage cleanly and purge legacy dummy mock data
 export async function initializeLocalData(): Promise<void> {
   // 0. Auto-migrate & purge legacy storage bloat to free up localStorage quota immediately
   try {
     const existingEventsRaw = safeLocalStorageGet(LS_EVENTS_KEY);
     if (existingEventsRaw) {
-      const parsed: FlyerEvent[] = JSON.parse(existingEventsRaw);
+      let parsed: FlyerEvent[] = JSON.parse(existingEventsRaw);
+      
+      // Purge old mock demo events (ev_tech_001, ev_gala_002, ev_demo_*) so the workspace is live and clean
+      const hadMockEvents = parsed.some(
+        (e) => e.id === 'ev_tech_001' || e.id === 'ev_gala_002' || e.id.startsWith('ev_demo_')
+      );
+      if (hadMockEvents) {
+        parsed = parsed.filter(
+          (e) => e.id !== 'ev_tech_001' && e.id !== 'ev_gala_002' && !e.id.startsWith('ev_demo_')
+        );
+        safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(parsed));
+      }
+
+      // Sanitize oversized data URLs in remaining real events
       let needsSanitize = false;
       for (const ev of parsed) {
         if (ev.original_flyer_data_url && ev.original_flyer_data_url.length > 500) {
-          // Preserve in IndexedDB before stripping from localStorage
           if (ev.original_flyer_path) {
             await storeFileInIDB(ev.original_flyer_path, ev.original_flyer_data_url);
           }
@@ -222,7 +292,125 @@ export async function initializeLocalData(): Promise<void> {
       }
     }
 
-    // Clean up any old file_* entries from localStorage
+    // Purge mock dummy participants & downloads
+    const existingParticipantsRaw = safeLocalStorageGet(LS_PARTICIPANTS_KEY);
+    if (existingParticipantsRaw) {
+      const parts: Participant[] = JSON.parse(existingParticipantsRaw);
+      const cleanedParts = parts.filter(
+        (p) => p.id !== 'part_001' && p.id !== 'part_002' && p.id !== 'part_003' && !p.id.startsWith('part_demo_')
+      );
+      if (cleanedParts.length !== parts.length) {
+        safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify(cleanedParts));
+      }
+    }
+
+    const existingDownloadsRaw = safeLocalStorageGet(LS_DOWNLOADS_KEY);
+    if (existingDownloadsRaw) {
+      const dls: FlyerDownload[] = JSON.parse(existingDownloadsRaw);
+      const cleanedDls = dls.filter(
+        (d) => d.id !== 'dl_001' && d.id !== 'dl_002' && d.id !== 'dl_003' && d.id !== 'dl_004'
+      );
+      if (cleanedDls.length !== dls.length) {
+        safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify(cleanedDls));
+      }
+    }
+
+    // Clean up any old file_* entries from localStorage to save quota
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('file_')) {
+        localStorage.removeItem(k);
+      }
+    }
+  } catch (migrationErr) {
+    console.warn('[Eventra Storage] Storage auto-migration non-fatal notice:', migrationErr);
+// Clean storage initialization without any dummy user or mock data
+export async function initializeLocalData(): Promise<void> {
+  try {
+    // 1. Purge legacy dummy session if pointing to demo accounts
+    const activeSessionEmail = safeLocalStorageGet(LS_AUTH_SESSION);
+    if (activeSessionEmail && (
+      activeSessionEmail.includes('alex.morgan') || 
+      activeSessionEmail.includes('organizer@eventra') ||
+      activeSessionEmail.includes('demo')
+    )) {
+      try {
+        localStorage.removeItem(LS_AUTH_SESSION);
+      } catch {}
+      memoryKvStore.delete(LS_AUTH_SESSION);
+    }
+
+    // 2. Purge legacy dummy user profile
+    const existingUserRaw = safeLocalStorageGet(LS_USER_KEY);
+    if (existingUserRaw) {
+      try {
+        const u = JSON.parse(existingUserRaw);
+        if (u.email === 'alex.morgan@eventra.io' || u.email === 'organizer@eventra.io' || u.id?.startsWith('usr_demo') || u.id === 'usr_organizer_01') {
+          try {
+            localStorage.removeItem(LS_USER_KEY);
+          } catch {}
+          memoryKvStore.delete(LS_USER_KEY);
+        }
+      } catch {}
+    }
+
+    // 3. Purge legacy dummy accounts
+    getStoredAccounts();
+
+    // 4. Purge mock demo events
+    const existingEventsRaw = safeLocalStorageGet(LS_EVENTS_KEY);
+    if (existingEventsRaw) {
+      let parsed: FlyerEvent[] = JSON.parse(existingEventsRaw);
+      const hadMockEvents = parsed.some(
+        (e) => e.id === 'ev_tech_001' || e.id === 'ev_gala_002' || e.id.startsWith('ev_demo_')
+      );
+      if (hadMockEvents) {
+        parsed = parsed.filter(
+          (e) => e.id !== 'ev_tech_001' && e.id !== 'ev_gala_002' && !e.id.startsWith('ev_demo_')
+        );
+        safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(parsed));
+      }
+
+      // Sanitize oversized data URLs in remaining real events
+      let needsSanitize = false;
+      for (const ev of parsed) {
+        if (ev.original_flyer_data_url && ev.original_flyer_data_url.length > 500) {
+          if (ev.original_flyer_path) {
+            await storeFileInIDB(ev.original_flyer_path, ev.original_flyer_data_url);
+          }
+          ev.original_flyer_data_url = '';
+          needsSanitize = true;
+        }
+      }
+      if (needsSanitize) {
+        safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(parsed));
+      }
+    }
+
+    // 5. Purge mock dummy participants & downloads
+    const existingParticipantsRaw = safeLocalStorageGet(LS_PARTICIPANTS_KEY);
+    if (existingParticipantsRaw) {
+      const parts: Participant[] = JSON.parse(existingParticipantsRaw);
+      const cleanedParts = parts.filter(
+        (p) => p.id !== 'part_001' && p.id !== 'part_002' && p.id !== 'part_003' && !p.id.startsWith('part_demo_')
+      );
+      if (cleanedParts.length !== parts.length) {
+        safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify(cleanedParts));
+      }
+    }
+
+    const existingDownloadsRaw = safeLocalStorageGet(LS_DOWNLOADS_KEY);
+    if (existingDownloadsRaw) {
+      const dls: FlyerDownload[] = JSON.parse(existingDownloadsRaw);
+      const cleanedDls = dls.filter(
+        (d) => d.id !== 'dl_001' && d.id !== 'dl_002' && d.id !== 'dl_003' && d.id !== 'dl_004'
+      );
+      if (cleanedDls.length !== dls.length) {
+        safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify(cleanedDls));
+      }
+    }
+
+    // 6. Clean up any old file_* entries from localStorage to save quota
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
       if (k && k.startsWith('file_')) {
@@ -233,222 +421,40 @@ export async function initializeLocalData(): Promise<void> {
     console.warn('[Eventra Storage] Storage auto-migration non-fatal notice:', migrationErr);
   }
 
-  // 1. Initial User
-  if (!safeLocalStorageGet(LS_USER_KEY)) {
-    const defaultProfile: Profile = {
-      id: 'usr_demo_482b5ca0',
-      full_name: 'Alex Morgan',
-      email: 'alex.morgan@eventra.io',
-      role: 'organisation_owner',
-      current_org_id: 'org_elevate_01',
-      created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
-    };
-    safeLocalStorageSet(LS_USER_KEY, JSON.stringify(defaultProfile));
-  }
-
-  // 2. Initial Organisation
-  if (!safeLocalStorageGet(LS_ORGS_KEY)) {
-    const defaultOrg: Organisation = {
-      id: 'org_elevate_01',
-      name: 'Elevate Experience Group',
-      slug: 'elevate-group',
-      owner_id: 'usr_demo_482b5ca0',
-      plan: 'professional',
-      settings: {
-        default_timezone: 'America/New_York (EST)',
-        brand_color: '#6425E8',
-      },
-      created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
-    };
-    safeLocalStorageSet(LS_ORGS_KEY, JSON.stringify([defaultOrg]));
-    safeLocalStorageSet(LS_CURRENT_ORG_KEY, 'org_elevate_01');
-  }
-
-  // 3. Initial Organisation Members
-  if (!safeLocalStorageGet(LS_ORG_MEMBERS_KEY)) {
-    const members: OrganisationMember[] = [
-      {
-        id: 'mem_01',
-        org_id: 'org_elevate_01',
-        user_id: 'usr_demo_482b5ca0',
-        full_name: 'Alex Morgan',
-        email: 'alex.morgan@eventra.io',
-        role: 'owner',
-        joined_at: new Date(Date.now() - 30 * 86400000).toISOString(),
-      },
-      {
-        id: 'mem_02',
-        org_id: 'org_elevate_01',
-        user_id: 'usr_diana_02',
-        full_name: 'Diana Hayes',
-        email: 'diana.h@eventra.io',
-        role: 'event_manager',
-        joined_at: new Date(Date.now() - 18 * 86400000).toISOString(),
-      },
-      {
-        id: 'mem_03',
-        org_id: 'org_elevate_01',
-        user_id: 'usr_marcus_03',
-        full_name: 'Marcus Vance',
-        email: 'marcus.v@eventra.io',
-        role: 'member',
-        joined_at: new Date(Date.now() - 5 * 86400000).toISOString(),
-      },
-    ];
-    safeLocalStorageSet(LS_ORG_MEMBERS_KEY, JSON.stringify(members));
-  }
-
-  // 4. Initial Events
+  // 7. Initial clean empty collections for live operation (NO dummy user or events)
   if (!safeLocalStorageGet(LS_EVENTS_KEY)) {
-    const techFlyerData = createSampleFlyerDataUrl('tech');
-    const galaFlyerData = createSampleFlyerDataUrl('gala');
-
-    const techFileKey = 'event-flyers/tech-summit-2026.jpg';
-    const galaFileKey = 'event-flyers/worship-expression-2026.jpg';
-
-    // Store the binary image data safely in IndexedDB
-    await storeFileInIDB(techFileKey, techFlyerData);
-    await storeFileInIDB(galaFileKey, galaFlyerData);
-
-    const initialEvents: FlyerEvent[] = [
-      {
-        id: 'ev_tech_001',
-        user_id: 'usr_demo_482b5ca0',
-        org_id: 'org_elevate_01',
-        event_name: 'Next Horizon AI Summit 2026',
-        slug: 'next-horizon-2026',
-        original_flyer_path: techFileKey,
-        original_flyer_data_url: '', // Left blank in localStorage to keep storage tiny (<1KB)
-        status: 'published',
-        category: 'Technology & AI',
-        venue: 'Moscone Center, San Francisco',
-        event_date: 'November 14-16, 2026',
-        created_at: new Date(Date.now() - 7 * 86400000).toISOString(),
-        updated_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-      },
-      {
-        id: 'ev_gala_002',
-        user_id: 'usr_demo_482b5ca0',
-        org_id: 'org_elevate_01',
-        event_name: 'Worship Expression Gala',
-        slug: 'worship-expression-gala',
-        original_flyer_path: galaFileKey,
-        original_flyer_data_url: '', // Left blank in localStorage
-        status: 'published',
-        category: 'Arts & Gala',
-        venue: 'Grand Symphony Hall',
-        event_date: 'December 20, 2026',
-        created_at: new Date(Date.now() - 12 * 86400000).toISOString(),
-        updated_at: new Date(Date.now() - 1 * 86400000).toISOString(),
-      },
-    ];
-
-    const initialTemplates: FlyerTemplate[] = [
-      {
-        id: 'tmpl_tech_001',
-        event_id: 'ev_tech_001',
-        photo_x: 0.35,
-        photo_y: 0.27,
-        photo_width: 0.30,
-        photo_height: 0.30,
-        photo_shape: 'circle',
-        photo_crop_settings: { zoom: 1 },
-        name_x: 0.15,
-        name_y: 0.60,
-        name_width: 0.70,
-        name_height: 0.08,
-        font_family: 'Plus Jakarta Sans, sans-serif',
-        font_size: 42,
-        font_weight: '700',
-        text_color: '#FFFFFF',
-        text_alignment: 'center',
-        max_lines: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      {
-        id: 'tmpl_gala_002',
-        event_id: 'ev_gala_002',
-        photo_x: 0.34,
-        photo_y: 0.28,
-        photo_width: 0.32,
-        photo_height: 0.32,
-        photo_shape: 'circle',
-        photo_crop_settings: { zoom: 1 },
-        name_x: 0.15,
-        name_y: 0.62,
-        name_width: 0.70,
-        name_height: 0.08,
-        font_family: 'Playfair Display, serif',
-        font_size: 46,
-        font_weight: '700',
-        text_color: '#FACC15',
-        text_alignment: 'center',
-        max_lines: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    ];
-
-    const initialParticipants: Participant[] = [
-      {
-        id: 'part_001',
-        event_id: 'ev_tech_001',
-        full_name: 'Elena Rostova',
-        photo_path: 'sample-portrait',
-        created_at: new Date(Date.now() - 3 * 86400000).toISOString(),
-      },
-      {
-        id: 'part_002',
-        event_id: 'ev_tech_001',
-        full_name: 'Marcus Vance',
-        photo_path: 'sample-portrait',
-        created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-      },
-      {
-        id: 'part_003',
-        event_id: 'ev_gala_002',
-        full_name: 'Sarah Adebayo',
-        photo_path: 'sample-portrait',
-        created_at: new Date(Date.now() - 5 * 86400000).toISOString(),
-      },
-    ];
-
-    const initialDownloads: FlyerDownload[] = [
-      { id: 'dl_001', participant_id: 'part_001', event_id: 'ev_tech_001', format: 'png', downloaded_at: new Date().toISOString() },
-      { id: 'dl_002', participant_id: 'part_001', event_id: 'ev_tech_001', format: 'pdf', downloaded_at: new Date().toISOString() },
-      { id: 'dl_003', participant_id: 'part_002', event_id: 'ev_tech_001', format: 'jpg', downloaded_at: new Date().toISOString() },
-      { id: 'dl_004', participant_id: 'part_003', event_id: 'ev_gala_002', format: 'png', downloaded_at: new Date().toISOString() },
-    ];
-
-    safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(initialEvents));
-    safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify(initialTemplates));
-    safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify(initialParticipants));
-    safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify(initialDownloads));
+    safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify([]));
+  }
+  if (!safeLocalStorageGet(LS_TEMPLATES_KEY)) {
+    safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify([]));
+  }
+  if (!safeLocalStorageGet(LS_PARTICIPANTS_KEY)) {
+    safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify([]));
+  }
+  if (!safeLocalStorageGet(LS_DOWNLOADS_KEY)) {
+    safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify([]));
   }
 }
 
 // Database helper operations
 export const db = {
-  getCurrentProfile(): Profile {
+  getCurrentProfile(): Profile | null {
     const raw = safeLocalStorageGet(LS_USER_KEY);
-    if (!raw) {
-      const def: Profile = {
-        id: 'usr_demo_482b5ca0',
-        full_name: 'Alex Morgan',
-        email: 'alex.morgan@eventra.io',
-        role: 'organisation_owner',
-        current_org_id: 'org_elevate_01',
-        created_at: new Date().toISOString(),
-      };
-      safeLocalStorageSet(LS_USER_KEY, JSON.stringify(def));
-      return def;
+    if (!raw) return null;
+    try {
+      const parsed: Profile = JSON.parse(raw);
+      if (parsed.email === 'alex.morgan@eventra.io' || parsed.email === 'organizer@eventra.io' || parsed.id?.startsWith('usr_demo') || parsed.id === 'usr_organizer_01') {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
     }
-    return JSON.parse(raw);
   },
 
-  updateProfile(updates: Partial<Profile>): Profile {
+  updateProfile(updates: Partial<Profile>): Profile | null {
     const current = this.getCurrentProfile();
+    if (!current) return null;
     const updated = { ...current, ...updates };
     safeLocalStorageSet(LS_USER_KEY, JSON.stringify(updated));
     return updated;
@@ -456,26 +462,23 @@ export const db = {
 
   getOrganisations(): Organisation[] {
     const raw = safeLocalStorageGet(LS_ORGS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    try {
+      const orgs: Organisation[] = JSON.parse(raw);
+      return orgs.filter((o) => o.id !== 'org_elevate_01' && o.owner_id !== 'usr_demo_482b5ca0');
+    } catch {
+      return [];
+    }
   },
 
-  getCurrentOrganisation(): Organisation {
+  getCurrentOrganisation(): Organisation | null {
     const orgs = this.getOrganisations();
     const currentId = safeLocalStorageGet(LS_CURRENT_ORG_KEY);
-    const found = orgs.find((o) => o.id === currentId);
-    if (found) return found;
-    if (orgs.length > 0) return orgs[0];
-
-    const def: Organisation = {
-      id: 'org_elevate_01',
-      name: 'Elevate Experience Group',
-      slug: 'elevate-group',
-      owner_id: 'usr_demo_482b5ca0',
-      plan: 'professional',
-      created_at: new Date().toISOString(),
-    };
-    this.saveOrganisation(def);
-    return def;
+    if (currentId) {
+      const found = orgs.find((o) => o.id === currentId);
+      if (found) return found;
+    }
+    return orgs.length > 0 ? orgs[0] : null;
   },
 
   saveOrganisation(org: Organisation): Organisation {
@@ -499,7 +502,8 @@ export const db = {
   getOrgMembers(orgId?: string): OrganisationMember[] {
     const raw = safeLocalStorageGet(LS_ORG_MEMBERS_KEY);
     const list: OrganisationMember[] = raw ? JSON.parse(raw) : [];
-    const targetOrgId = orgId || this.getCurrentOrganisation().id;
+    const targetOrgId = orgId || this.getCurrentOrganisation()?.id;
+    if (!targetOrgId) return [];
     return list.filter((m) => m.org_id === targetOrgId);
   },
 
@@ -623,5 +627,36 @@ export const db = {
     list.push(download);
     safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify(list.slice(-50))); // Cap to latest 50
     return download;
+  },
+
+  purgeDummyData(): { removedEvents: number; removedParticipants: number } {
+    const events = this.getEvents();
+    const realEvents = events.filter(
+      (e) => e.id !== 'ev_tech_001' && e.id !== 'ev_gala_002' && !e.id.startsWith('ev_demo_')
+    );
+    const removedEvents = events.length - realEvents.length;
+    safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify(realEvents));
+
+    const parts = this.getParticipants();
+    const realParts = parts.filter(
+      (p) => p.id !== 'part_001' && p.id !== 'part_002' && p.id !== 'part_003' && !p.id.startsWith('part_demo_')
+    );
+    const removedParts = parts.length - realParts.length;
+    safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify(realParts));
+
+    const dls = this.getDownloads();
+    const realDls = dls.filter(
+      (d) => d.id !== 'dl_001' && d.id !== 'dl_002' && d.id !== 'dl_003' && d.id !== 'dl_004'
+    );
+    safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify(realDls));
+
+    return { removedEvents, removedParticipants: removedParts };
+  },
+
+  clearWorkspaceEvents(): void {
+    safeLocalStorageSet(LS_EVENTS_KEY, JSON.stringify([]));
+    safeLocalStorageSet(LS_TEMPLATES_KEY, JSON.stringify([]));
+    safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify([]));
+    safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify([]));
   },
 };

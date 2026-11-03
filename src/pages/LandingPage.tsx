@@ -13,14 +13,9 @@ import { PLATFORM_MODULES } from '../lib/modules';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, quickDemoLogin } = useAuth();
+  const { user } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [demoStep, setDemoStep] = useState<'original' | 'upload' | 'completed'>('completed');
-
-  const handleQuickStart = () => {
-    quickDemoLogin();
-    navigate('/create-event');
-  };
 
   return (
     <div className="min-h-screen bg-[#F8F8FC] text-[#111126] flex flex-col font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8]">
@@ -61,12 +56,12 @@ export const LandingPage: React.FC = () => {
               >
                 Sign In
               </Link>
-              <button
-                onClick={handleQuickStart}
+              <Link
+                to="/register"
                 className="px-3 sm:px-4 py-2 text-xs font-semibold text-white bg-[#6425E8] hover:bg-[#4214B8] rounded-xl shadow-sm transition whitespace-nowrap shrink-0"
               >
                 Get Started
-              </button>
+              </Link>
             </div>
           )}
 
@@ -114,15 +109,13 @@ export const LandingPage: React.FC = () => {
               >
                 Sign In
               </Link>
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  handleQuickStart();
-                }}
+              <Link
+                to="/register"
+                onClick={() => setMobileMenuOpen(false)}
                 className="px-4 py-2 bg-[#6425E8] text-white text-xs font-semibold rounded-xl"
               >
-                Get Started Free
-              </button>
+                Get Started
+              </Link>
             </div>
           )}
         </div>
@@ -131,15 +124,15 @@ export const LandingPage: React.FC = () => {
 
       {/* Hero Section */}
       <main className="flex-1 max-w-5xl mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-20 sm:pb-24 text-center relative">
-        {/* Decorative Floating Status Badges (Animated) */}
-        <div className="hidden lg:flex items-center gap-2.5 px-3 py-1.5 bg-white/90 backdrop-blur-md border border-[#E9E8F0] rounded-full shadow-md text-xs font-semibold text-[#111126] absolute -top-2 left-6 animate-float-slow z-10 pointer-events-none">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-          <span>⚡ 14,800+ Personalized Flyers Generated</span>
+        {/* Live System Indicator */}
+        <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-white border border-[#E9E8F0] rounded-xl shadow-xs text-xs font-semibold text-[#111126] absolute -top-2 left-6 pointer-events-none">
+          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Self-Service Participant Engine</span>
         </div>
 
-        <div className="hidden lg:flex items-center gap-2.5 px-3 py-1.5 bg-white/90 backdrop-blur-md border border-[#E9E8F0] rounded-full shadow-md text-xs font-semibold text-[#111126] absolute top-8 right-6 animate-float-delayed z-10 pointer-events-none">
+        <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-white border border-[#E9E8F0] rounded-xl shadow-xs text-xs font-semibold text-[#111126] absolute top-8 right-6 pointer-events-none">
           <Sparkles className="w-3.5 h-3.5 text-[#6425E8]" />
-          <span>🎯 Real-Time 300 DPI Canvas Engine</span>
+          <span>High-Resolution Canvas Export</span>
         </div>
 
         {/* Brand Kicker */}
@@ -163,19 +156,20 @@ export const LandingPage: React.FC = () => {
 
         {/* CTAs with tactile micro-interactions */}
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3.5">
-          <button
-            onClick={handleQuickStart}
+          <Link
+            to="/register"
             className="interactive-btn group relative overflow-hidden w-full sm:w-auto px-7 py-3.5 bg-[#6425E8] hover:bg-[#4214B8] text-white font-semibold text-xs rounded-xl shadow-md transition-all flex items-center justify-center space-x-2"
           >
-            <span>Get Started Free</span>
+            <span>Create Free Account</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </button>
-          <a
-            href="#eventra-create"
-            className="interactive-btn w-full sm:w-auto px-6 py-3.5 bg-white border border-[#E9E8F0] text-[#111126] font-semibold text-xs rounded-xl hover:bg-[#F8F8FC] hover:border-[#CBD5E1] transition shadow-sm"
+          </Link>
+          <Link
+            to="/login"
+            className="interactive-btn w-full sm:w-auto px-6 py-3.5 bg-white border border-[#E9E8F0] text-[#111126] font-semibold text-xs rounded-xl hover:bg-[#F8F8FC] hover:border-[#CBD5E1] transition shadow-sm flex items-center justify-center space-x-1.5"
           >
-            Explore Eventra Create
-          </a>
+            <span>Sign In to Workspace</span>
+            <ArrowRight className="w-3.5 h-3.5 text-[#73738A]" />
+          </Link>
         </div>
 
         {/* SPOTLIGHT MODULE: EVENTRA CREATE (Interactive Demo Engine) */}

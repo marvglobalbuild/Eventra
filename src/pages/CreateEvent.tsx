@@ -22,6 +22,7 @@ export const CreateEvent: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [nameTextColor, setNameTextColor] = useState('#FFFFFF');
   const [error, setError] = useState<string | null>(null);
 
   const generateSlug = (text: string) => {
@@ -60,8 +61,8 @@ export const CreateEvent: React.FC = () => {
 
       const newEvent = db.saveEvent({
         id: evId,
-        user_id: user?.id || 'usr_demo',
-        org_id: currentOrg?.id || 'org_elevate_01',
+        user_id: user?.id || '',
+        org_id: currentOrg?.id || user?.id || '',
         event_name: name,
         slug: slug,
         original_flyer_path: storageKey,
@@ -165,14 +166,14 @@ export const CreateEvent: React.FC = () => {
     setError(null);
 
     try {
-      const uploadRes = await uploadFlyerFile(file, user?.id || 'usr_demo');
+      const uploadRes = await uploadFlyerFile(file, user?.id || 'anon');
       const slug = generateSlug(eventName);
       const evId = `ev_${Date.now()}`;
 
       const newEvent = db.saveEvent({
         id: evId,
-        user_id: user?.id || 'usr_demo',
-        org_id: currentOrg?.id || 'org_elevate_01',
+        user_id: user?.id || '',
+        org_id: currentOrg?.id || user?.id || '',
         event_name: eventName.trim(),
         slug: slug,
         original_flyer_path: uploadRes.path,
@@ -201,7 +202,7 @@ export const CreateEvent: React.FC = () => {
         font_family: 'Plus Jakarta Sans, sans-serif',
         font_size: 44,
         font_weight: '700',
-        text_color: '#FFFFFF',
+        text_color: nameTextColor,
         text_alignment: 'center',
         max_lines: 1,
         created_at: new Date().toISOString(),
@@ -378,6 +379,41 @@ export const CreateEvent: React.FC = () => {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Name Text Color Selector */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-[#73738A]">
+                  Participant Name Color
+                </label>
+                <span className="text-xs font-mono font-bold text-[#111126]">{nameTextColor}</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { label: 'White Text', hex: '#FFFFFF', desc: 'Dark flyers' },
+                  { label: 'Dark Navy', hex: '#111126', desc: 'Light/White banners' },
+                  { label: 'Gold Text', hex: '#F59E0B', desc: 'Luxury / Worship' },
+                  { label: 'Eventra Purple', hex: '#6425E8', desc: 'Brand accent' },
+                ].map((c) => (
+                  <button
+                    key={c.hex}
+                    type="button"
+                    onClick={() => setNameTextColor(c.hex)}
+                    className={`p-2.5 rounded-xl border text-left transition ${
+                      nameTextColor === c.hex
+                        ? 'border-[#6425E8] bg-[#6425E8]/10 ring-2 ring-[#6425E8]/30 shadow-xs'
+                        : 'border-[#E9E8F0] hover:bg-[#F8F8FC]'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-1.5 mb-1">
+                      <span className="w-3.5 h-3.5 rounded-full border border-gray-300 shrink-0 shadow-2xs" style={{ backgroundColor: c.hex }} />
+                      <span className="text-[11px] font-bold text-[#111126] truncate">{c.label}</span>
+                    </div>
+                    <span className="text-[10px] text-[#73738A] block truncate">{c.desc}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <button

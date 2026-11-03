@@ -2,11 +2,18 @@ import jsPDF from 'jspdf';
 import confetti from 'canvas-confetti';
 import { FlyerTemplate } from '../types/database';
 
+export interface PhotoCropSettings {
+  zoom?: number; // 1.0 to 3.5 (100% to 350%)
+  offsetX?: number; // -1 to 1 (horizontal pan)
+  offsetY?: number; // -1 to 1 (vertical pan)
+}
+
 export interface CompositePayload {
   flyerImageUrl: string;
   participantImageUrl: string;
   participantName: string;
   template: FlyerTemplate;
+  cropSettings?: PhotoCropSettings;
 }
 
 /**
@@ -26,7 +33,7 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
       if (src.startsWith('data:') || src.startsWith('blob:')) {
         const retryImg = new Image();
         retryImg.onload = () => resolve(retryImg);
-        retryImg.onerror = (e) => reject(new Error('Failed to decode image data.'));
+        retryImg.onerror = () => reject(new Error('Failed to decode image data.'));
         retryImg.src = src;
         return;
       }
@@ -37,39 +44,71 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 /**
- * Draws an image into target bounding box using 'cover' aspect ratio
+ * Draws an image into target bounding box with cover scaling, interactive zoom, and pan offset
  */
-function drawImageCover(
+function drawImageCoverWithCrop(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   targetX: number,
   targetY: number,
   targetW: number,
-  targetH: number
+  targetH: number,
+  zoom = 1,
+  offsetX = 0,
+  offsetY = 0
 ) {
   const imgRatio = img.naturalWidth / img.naturalHeight;
   const targetRatio = targetW / targetH;
-  let sWidth = img.naturalWidth;
-  let sHeight = img.naturalHeight;
-  let sx = 0;
-  let sy = 0;
+  let baseW = img.naturalWidth;
+  let baseH = img.naturalHeight;
 
   if (imgRatio > targetRatio) {
-    sWidth = img.naturalHeight * targetRatio;
-    sx = (img.naturalWidth - sWidth) / 2;
+    baseW = img.naturalHeight * targetRatio;
   } else {
-    sHeight = img.naturalWidth / targetRatio;
-    sy = (img.naturalHeight - sHeight) / 2;
+    baseH = img.naturalWidth / targetRatio;
   }
 
+  // Zoom: higher zoom crops in closer to reveal the face prominently
+  const effectiveZoom = Math.max(1, zoom);
+  const sWidth = baseW / effectiveZoom;
+  const sHeight = baseH / effectiveZoom;
+
+  // Maximum pan boundaries on source image
+  const maxSlackX = Math.max(0, (img.naturalWidth - sWidth) / 2);
+  const maxSlackY = Math.max(0, (img.naturalHeight - sHeight) / 2);
+
+  const centerX = (img.naturalWidth - sWidth) / 2;
+  const centerY = (img.naturalHeight - sHeight) / 2;
+
+  // offsetX / offsetY range: -1 to 1
+  const sx = Math.max(0, Math.min(img.naturalWidth - sWidth, centerX + offsetX * maxSlackX));
+  const sy = Math.max(0, Math.min(img.naturalHeight - sHeight, centerY + offsetY * maxSlackY));
+
   ctx.drawImage(img, sx, sy, sWidth, sHeight, targetX, targetY, targetW, targetH);
+}
+
+/**
+ * Helper to determine if a color is light or dark (for optimal shadow rendering)
+ */
+function isLightColor(colorStr: string): boolean {
+  if (!colorStr) return true;
+  let hex = colorStr.replace('#', '');
+  if (hex.length === 3) {
+    hex = hex.split('').map((c) => c + c).join('');
+  }
+  const r = parseInt(hex.substring(0, 2), 16) || 255;
+  const g = parseInt(hex.substring(2, 4), 16) || 255;
+  const b = parseInt(hex.substring(4, 6), 16) || 255;
+  // Perceived brightness formula
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  return brightness > 140;
 }
 
 /**
  * Composites the personalized flyer at native flyer dimensions using normalized coordinates
  */
 export async function renderPersonalisedFlyer(payload: CompositePayload): Promise<HTMLCanvasElement> {
-  const { flyerImageUrl, participantImageUrl, participantName, template } = payload;
+  const { flyerImageUrl, participantImageUrl, participantName, template, cropSettings } = payload;
 
   const [flyerImg, participantImg] = await Promise.all([
     loadImage(flyerImageUrl),
@@ -94,7 +133,7 @@ export async function renderPersonalisedFlyer(payload: CompositePayload): Promis
   const photoW = Number(template.photo_width) * width;
   const photoH = Number(template.photo_height) * height;
 
-  // 3. Render Participant Photo with shape clipping
+  // 3. Render Participant Photo with shape clipping and custom zoom/pan
   ctx.save();
   ctx.beginPath();
   if (template.photo_shape === 'circle') {
@@ -110,49 +149,67 @@ export async function renderPersonalisedFlyer(payload: CompositePayload): Promis
   ctx.closePath();
   ctx.clip();
 
-  drawImageCover(ctx, participantImg, photoX, photoY, photoW, photoH);
+  const zoom = cropSettings?.zoom ?? template.photo_crop_settings?.zoom ?? 1.0;
+  const offsetX = cropSettings?.offsetX ?? 0;
+  const offsetY = cropSettings?.offsetY ?? 0;
+
+  drawImageCoverWithCrop(ctx, participantImg, photoX, photoY, photoW, photoH, zoom, offsetX, offsetY);
   ctx.restore();
 
-  // 4. Render Participant Name with auto-scaling to prevent overflowing the designated box
+  // 4. Render Participant Name with strict auto-fitting into designated bounding box
   const nameBoxX = Number(template.name_x) * width;
   const nameBoxY = Number(template.name_y) * height;
   const nameBoxW = Number(template.name_width) * width;
   const nameBoxH = Number(template.name_height) * height;
 
-  // Scale relative to standard 1080px width baseline
+  // Baseline scale relative to standard 1080px width
   const scale = width / 1080;
-  let dynamicFontSize = Math.max(16, Number(template.font_size || 44) * scale);
-  const minFontSize = dynamicFontSize * 0.4;
+  
+  // Constrain font size by both target box height AND width so it fits within any banner
+  const maxFontByHeight = Math.max(14, nameBoxH * 0.72);
+  let dynamicFontSize = Math.min(Number(template.font_size || 44) * scale, maxFontByHeight);
+  const minFontSize = Math.max(12, maxFontByHeight * 0.35);
 
   ctx.save();
-  ctx.fillStyle = template.text_color || '#FFFFFF';
+  const textColor = template.text_color || '#FFFFFF';
+  ctx.fillStyle = textColor;
   ctx.textAlign = template.text_alignment || 'center';
   ctx.textBaseline = 'middle';
 
   const fontFamily = template.font_family || 'Plus Jakarta Sans, sans-serif';
   const fontWeight = template.font_weight || '700';
 
-  // Measure text and downscale iteratively if name exceeds target width
+  // Measure text and downscale iteratively so participantName fits comfortably inside nameBoxW
   ctx.font = `${fontWeight} ${dynamicFontSize}px ${fontFamily}`;
-  while (ctx.measureText(participantName).width > nameBoxW && dynamicFontSize > minFontSize) {
-    dynamicFontSize -= 2;
+  const maxAllowedWidth = nameBoxW * 0.92; // 8% breathing margin
+  
+  while (ctx.measureText(participantName).width > maxAllowedWidth && dynamicFontSize > minFontSize) {
+    dynamicFontSize -= 1.5;
     ctx.font = `${fontWeight} ${dynamicFontSize}px ${fontFamily}`;
   }
 
   // Anchor text coordinate according to alignment
   let targetTextX = nameBoxX + nameBoxW / 2;
-  if (template.text_alignment === 'left') targetTextX = nameBoxX;
-  if (template.text_alignment === 'right') targetTextX = nameBoxX + nameBoxW;
+  if (template.text_alignment === 'left') targetTextX = nameBoxX + (nameBoxW * 0.04);
+  if (template.text_alignment === 'right') targetTextX = nameBoxX + (nameBoxW * 0.96);
 
   const targetTextY = nameBoxY + nameBoxH / 2;
 
-  // Draw clean drop shadow for contrast against complex flyer backgrounds
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-  ctx.shadowBlur = 8 * scale;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 2 * scale;
+  // Intelligently render shadow: If text is light, use drop shadow; if dark, use subtle clean ambient
+  if (isLightColor(textColor)) {
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
+    ctx.shadowBlur = 6 * scale;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 2 * scale;
+  } else {
+    // For dark text on light flyer badges (like cream or white boxes), use clean crisp rendering
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
+    ctx.shadowBlur = 2 * scale;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 1 * scale;
+  }
 
-  ctx.fillText(participantName, targetTextX, targetTextY, nameBoxW);
+  ctx.fillText(participantName, targetTextX, targetTextY, maxAllowedWidth);
   ctx.restore();
 
   return canvas;
@@ -206,6 +263,6 @@ export function triggerFlyerCelebration() {
     particleCount: 80,
     spread: 70,
     origin: { y: 0.6 },
-    colors: ['#5145E5', '#16A34A', '#F59E0B', '#3B82F6', '#EC4899'],
+    colors: ['#6425E8', '#16A34A', '#F59E0B', '#3B82F6', '#EC4899'],
   });
 }
