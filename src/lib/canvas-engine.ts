@@ -50,7 +50,11 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
 /**
  * Draws an image into target bounding box with cover scaling, interactive zoom, and pan offset
  */
-function drawImageCoverWithCrop(
+/**
+ * Draws an image into target bounding box with exact 1:1 WYSIWYG cover scaling, zoom, and pan offset.
+ * Matches CSS: object-fit: cover with normalized pan translation (offsetX * targetW, offsetY * targetH).
+ */
+export function drawImageCoverWithCrop(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   targetX: number,
@@ -61,34 +65,17 @@ function drawImageCoverWithCrop(
   offsetX = 0,
   offsetY = 0
 ) {
-  const imgRatio = img.naturalWidth / img.naturalHeight;
-  const targetRatio = targetW / targetH;
-  let baseW = img.naturalWidth;
-  let baseH = img.naturalHeight;
-
-  if (imgRatio > targetRatio) {
-    baseW = img.naturalHeight * targetRatio;
-  } else {
-    baseH = img.naturalWidth / targetRatio;
-  }
-
-  // Zoom: higher zoom crops in closer to reveal the face prominently
+  const baseScale = Math.max(targetW / img.naturalWidth, targetH / img.naturalHeight);
   const effectiveZoom = Math.max(1, zoom);
-  const sWidth = baseW / effectiveZoom;
-  const sHeight = baseH / effectiveZoom;
+  const renderW = img.naturalWidth * baseScale * effectiveZoom;
+  const renderH = img.naturalHeight * baseScale * effectiveZoom;
 
-  // Maximum pan boundaries on source image
-  const maxSlackX = Math.max(0, (img.naturalWidth - sWidth) / 2);
-  const maxSlackY = Math.max(0, (img.naturalHeight - sHeight) / 2);
+  // Center image inside the target bounding box and apply normalized pan offset
+  // When offsetX > 0, image shifts right. When offsetY > 0, image shifts down (revealing the head).
+  const drawX = targetX + (targetW - renderW) / 2 + offsetX * targetW;
+  const drawY = targetY + (targetH - renderH) / 2 + offsetY * targetH;
 
-  const centerX = (img.naturalWidth - sWidth) / 2;
-  const centerY = (img.naturalHeight - sHeight) / 2;
-
-  // offsetX / offsetY range: -1 to 1
-  const sx = Math.max(0, Math.min(img.naturalWidth - sWidth, centerX + offsetX * maxSlackX));
-  const sy = Math.max(0, Math.min(img.naturalHeight - sHeight, centerY + offsetY * maxSlackY));
-
-  ctx.drawImage(img, sx, sy, sWidth, sHeight, targetX, targetY, targetW, targetH);
+  ctx.drawImage(img, drawX, drawY, renderW, renderH);
 }
 
 /**
@@ -132,48 +119,41 @@ export async function renderPersonalisedFlyer(payload: CompositePayload): Promis
   ctx.drawImage(flyerImg, 0, 0, width, height);
 
   // 2. Compute absolute coordinates from normalized template coordinates [0, 1]
-  const photoX = Number(template.photo_x) * width;
-  const photoY = Number(template.photo_y) * height;
-  const photoW = Number(template.photo_width) * width;
-  const photoH = Number(template.photo_height) * height;
-  // Frame scale and position offsets (frameOffsetX, frameOffsetY) to center on flyer cutout perfectly
   const frameScale = cropSettings?.frameScale ?? template.photo_crop_settings?.frameScale ?? 1.0;
   const frameOffsetX = (cropSettings?.frameOffsetX ?? template.photo_crop_settings?.frameOffsetX ?? 0) * width;
   const frameOffsetY = (cropSettings?.frameOffsetY ?? template.photo_crop_settings?.frameOffsetY ?? 0) * height;
 
-  const centerX = photoX + photoW / 2 + frameOffsetX;
-  const centerY = photoY + photoH / 2 + frameOffsetY;
+  const photoX = Number(template.photo_x) * width + frameOffsetX;
+  const photoY = Number(template.photo_y) * height + frameOffsetY;
+  const photoW = Number(template.photo_width) * width * frameScale;
+  const photoH = Number(template.photo_height) * height * frameScale;
 
   let drawX = photoX;
   let drawY = photoY;
   let drawW = photoW;
   let drawH = photoH;
-  let photoBottom = centerY;
+  let photoBottom = photoY + photoH;
 
   // 3. Render Participant Photo with shape clipping and custom zoom/pan
   ctx.save();
   ctx.beginPath();
   if (template.photo_shape === 'circle') {
-    const radius = (Math.min(photoW, photoH) / 2) * frameScale;
+    // For a circle, use uniform square diameter based on photoW
+    const diameter = photoW;
+    const radius = diameter / 2;
+    const centerX = photoX + radius;
+    const centerY = photoY + radius;
     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2, true);
-    drawX = centerX - radius;
-    drawY = centerY - radius;
-    drawW = radius * 2;
-    drawH = radius * 2;
+    drawX = photoX;
+    drawY = photoY;
+    drawW = diameter;
+    drawH = diameter;
     photoBottom = centerY + radius;
   } else {
     // Rounded rectangle or sharp rectangle
-    const targetW = photoW * frameScale;
-    const targetH = photoH * frameScale;
-    const targetX = centerX - targetW / 2;
-    const targetY = centerY - targetH / 2;
-    const cornerRadius = template.photo_crop_settings?.borderRadius ?? (Math.min(targetW, targetH) * 0.08);
-    ctx.roundRect(targetX, targetY, targetW, targetH, cornerRadius);
-    drawX = targetX;
-    drawY = targetY;
-    drawW = targetW;
-    drawH = targetH;
-    photoBottom = centerY + targetH / 2;
+    const cornerRadius = template.photo_crop_settings?.borderRadius ?? (Math.min(photoW, photoH) * 0.08);
+    ctx.roundRect(photoX, photoY, photoW, photoH, cornerRadius);
+    photoBottom = photoY + photoH;
   }
   ctx.closePath();
   ctx.clip();

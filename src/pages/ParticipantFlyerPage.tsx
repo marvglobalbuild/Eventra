@@ -40,20 +40,56 @@ export const ParticipantFlyerPage: React.FC = () => {
   const [downloadingFormat, setDownloadingFormat] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Photo Framing & Zoom Controls
-  const [zoom, setZoom] = useState<number>(1.25);
+  // Photo Framing & Zoom Controls (normalized WYSIWYG)
+  const [zoom, setZoom] = useState<number>(1.0);
   const [frameScale, setFrameScale] = useState<number>(1.0);
   const [frameOffsetX, setFrameOffsetX] = useState<number>(0);
   const [frameOffsetY, setFrameOffsetY] = useState<number>(0);
   const [nameOffsetY, setNameOffsetY] = useState<number>(0);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
+
+  const flyerContainerRef = useRef<HTMLDivElement>(null);
+  const photoSlotRef = useRef<HTMLDivElement>(null);
+  const [photoNaturalDim, setPhotoNaturalDim] = useState<{ width: number; height: number }>({ width: 1000, height: 1000 });
+  const [slotDim, setSlotDim] = useState<{ width: number; height: number }>({ width: 140, height: 140 });
+
   const dragStartRef = useRef<{ startX: number; startY: number; origPanX: number; origPanY: number }>({
     startX: 0,
     startY: 0,
     origPanX: 0,
     origPanY: 0,
   });
+
+  // Track natural dimensions of attendee photograph
+  useEffect(() => {
+    if (!photoPreviewUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      setPhotoNaturalDim({
+        width: img.naturalWidth || 1000,
+        height: img.naturalHeight || 1000,
+      });
+    };
+    img.src = photoPreviewUrl;
+  }, [photoPreviewUrl]);
+
+  // Track rendered slot dimensions on screen with ResizeObserver
+  useEffect(() => {
+    if (!photoSlotRef.current) return;
+    const updateSlotDim = () => {
+      if (photoSlotRef.current) {
+        const rect = photoSlotRef.current.getBoundingClientRect();
+        if (rect.width > 0) {
+          setSlotDim({ width: rect.width, height: rect.height });
+        }
+      }
+    };
+    updateSlotDim();
+    const ro = new ResizeObserver(updateSlotDim);
+    ro.observe(photoSlotRef.current);
+    return () => ro.disconnect();
+  }, [photoPreviewUrl, frameScale, frameOffsetX, frameOffsetY]);
 
   // Output Result State
   const [generatedCanvas, setGeneratedCanvas] = useState<HTMLCanvasElement | null>(null);
@@ -75,11 +111,13 @@ export const ParticipantFlyerPage: React.FC = () => {
 
   const handlePhotoMouseMove = (e: React.MouseEvent) => {
     if (!isDraggingPhoto) return;
+    const currentW = slotDim.width || 140;
+    const currentH = slotDim.height || 140;
     const dx = e.clientX - dragStartRef.current.startX;
     const dy = e.clientY - dragStartRef.current.startY;
     setPanOffset({
-      x: Math.max(-120, Math.min(120, dragStartRef.current.origPanX + dx)),
-      y: Math.max(-120, Math.min(120, dragStartRef.current.origPanY + dy)),
+      x: Math.max(-1.5, Math.min(1.5, Number((dragStartRef.current.origPanX + dx / currentW).toFixed(4)))),
+      y: Math.max(-1.5, Math.min(1.5, Number((dragStartRef.current.origPanY + dy / currentH).toFixed(4)))),
     });
   };
 
@@ -100,11 +138,13 @@ export const ParticipantFlyerPage: React.FC = () => {
 
   const handlePhotoTouchMove = (e: React.TouchEvent) => {
     if (!isDraggingPhoto || e.touches.length !== 1) return;
+    const currentW = slotDim.width || 140;
+    const currentH = slotDim.height || 140;
     const dx = e.touches[0].clientX - dragStartRef.current.startX;
     const dy = e.touches[0].clientY - dragStartRef.current.startY;
     setPanOffset({
-      x: Math.max(-120, Math.min(120, dragStartRef.current.origPanX + dx)),
-      y: Math.max(-120, Math.min(120, dragStartRef.current.origPanY + dy)),
+      x: Math.max(-1.5, Math.min(1.5, Number((dragStartRef.current.origPanX + dx / currentW).toFixed(4)))),
+      y: Math.max(-1.5, Math.min(1.5, Number((dragStartRef.current.origPanY + dy / currentH).toFixed(4)))),
     });
   };
 
@@ -231,7 +271,7 @@ export const ParticipantFlyerPage: React.FC = () => {
     // Auto-detect template parameters and apply optimal centering & spacing
     if (tmpl.photo_shape === 'circle') {
       if (tmpl.photo_width <= 0.32) {
-        setFrameScale(tmpl.photo_crop_settings?.frameScale ?? 1.35);
+        setFrameScale(tmpl.photo_crop_settings?.frameScale ?? 1.45);
       } else if (tmpl.photo_crop_settings?.frameScale) {
         setFrameScale(tmpl.photo_crop_settings.frameScale);
       }
@@ -346,10 +386,7 @@ export const ParticipantFlyerPage: React.FC = () => {
       setGenerationStep('Compositing ultra high-res print flyer...');
       setGenerationProgress(90);
 
-      // Compute normalized offset coordinates based on preview frame radius (80px radius = 160px width)
-      const normalizedOffsetX = Number((panOffset.x / 80).toFixed(3));
-      const normalizedOffsetY = Number((panOffset.y / 80).toFixed(3));
-
+      // Direct 1:1 normalized offset coordinates (matches CSS preview)
       const canvas = await renderPersonalisedFlyer({
         flyerImageUrl: flyerSrc,
         participantImageUrl: photoPreviewUrl,
@@ -357,8 +394,8 @@ export const ParticipantFlyerPage: React.FC = () => {
         template: template,
         cropSettings: {
           zoom,
-          offsetX: normalizedOffsetX,
-          offsetY: normalizedOffsetY,
+          offsetX: panOffset.x,
+          offsetY: panOffset.y,
           frameScale,
           frameOffsetX,
           frameOffsetY,
@@ -594,51 +631,99 @@ export const ParticipantFlyerPage: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Interactive Framing Viewport matching flyer slot */}
+                  {/* Live Interactive WYSIWYG Flyer Canvas Viewport */}
                   <div
-                    className="relative w-full h-60 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 rounded-xl overflow-hidden flex items-center justify-center select-none touch-none cursor-grab active:cursor-grabbing border border-slate-800 shadow-inner"
-                    onMouseDown={handlePhotoMouseDown}
-                    onMouseMove={handlePhotoMouseMove}
-                    onMouseUp={handlePhotoMouseUp}
-                    onMouseLeave={handlePhotoMouseUp}
-                    onTouchStart={handlePhotoTouchStart}
-                    onTouchMove={handlePhotoTouchMove}
-                    onTouchEnd={handlePhotoTouchEnd}
+                    ref={flyerContainerRef}
+                    className="relative w-full rounded-2xl overflow-hidden border-2 border-[#6425E8]/30 shadow-md bg-slate-900 select-none touch-none mx-auto flex items-center justify-center"
+                    style={{
+                      maxHeight: '420px',
+                    }}
                   >
-                    {/* Dimmed backdrop blur */}
+                    {/* The Real Event Flyer Base Image */}
                     <img
-                      src={photoPreviewUrl}
-                      alt="Backdrop"
-                      className="absolute inset-0 w-full h-full object-cover opacity-20 blur-md pointer-events-none"
+                      src={flyerSrc}
+                      alt="Event Flyer"
+                      className="w-full h-auto block pointer-events-none select-none max-h-[420px] object-contain mx-auto"
                     />
 
-                    {/* Circular or Rectangular Cutout Frame */}
-                    <div
-                      className={`relative overflow-hidden ring-4 ring-white shadow-2xl transition-all ${
-                        template?.photo_shape === 'circle' ? 'rounded-full' : 'rounded-2xl'
-                      }`}
-                      style={{
-                        width: `${Math.round(176 * Math.min(1.28, Math.max(0.85, frameScale))) }px`,
-                        height: `${Math.round(176 * Math.min(1.28, Math.max(0.85, frameScale))) }px`,
-                        transform: `translate(${Math.round(frameOffsetX * 160)}px, ${Math.round(frameOffsetY * 160)}px)`,
-                      }}
-                    >
-                      <img
-                        src={photoPreviewUrl}
-                        alt="Framed Portrait"
-                        draggable={false}
-                        className="w-full h-full object-cover pointer-events-none"
+                    {/* Overlaid Interactive Photo Frame placed directly on top of flyer cutout */}
+                    {template && (
+                      <div
+                        ref={photoSlotRef}
+                        onMouseDown={handlePhotoMouseDown}
+                        onMouseMove={handlePhotoMouseMove}
+                        onMouseUp={handlePhotoMouseUp}
+                        onMouseLeave={handlePhotoMouseUp}
+                        onTouchStart={handlePhotoTouchStart}
+                        onTouchMove={handlePhotoTouchMove}
+                        onTouchEnd={handlePhotoTouchEnd}
                         style={{
-                          transform: `scale(${zoom}) translate(${panOffset.x / zoom}px, ${panOffset.y / zoom}px)`,
-                          transformOrigin: 'center center',
+                          position: 'absolute',
+                          left: `${(template.photo_x + frameOffsetX) * 100}%`,
+                          top: `${(template.photo_y + frameOffsetY) * 100}%`,
+                          width: `${(template.photo_width * frameScale) * 100}%`,
+                          aspectRatio: '1 / 1',
+                          borderRadius: template.photo_shape === 'circle' ? '9999px' : '12px',
+                          overflow: 'hidden',
                         }}
-                      />
-                    </div>
+                        className="ring-2 ring-[#6425E8] ring-offset-2 ring-offset-black/50 shadow-2xl cursor-grab active:cursor-grabbing z-10"
+                        title="Drag directly on your photo to center head and face"
+                      >
+                        {(() => {
+                          const naturalW = photoNaturalDim.width || 1000;
+                          const naturalH = photoNaturalDim.height || 1000;
+                          const sW = slotDim.width || 140;
+                          const sH = slotDim.height || 140;
+                          const baseScale = Math.max(sW / naturalW, sH / naturalH);
+                          const renderW = naturalW * baseScale * zoom;
+                          const renderH = naturalH * baseScale * zoom;
+                          const imgLeft = (sW - renderW) / 2 + panOffset.x * sW;
+                          const imgTop = (sH - renderH) / 2 + panOffset.y * sH;
+                          return (
+                            <img
+                              src={photoPreviewUrl}
+                              alt="Framed Portrait"
+                              draggable={false}
+                              style={{
+                                position: 'absolute',
+                                width: `${renderW}px`,
+                                height: `${renderH}px`,
+                                left: `${imgLeft}px`,
+                                top: `${imgTop}px`,
+                                maxWidth: 'none',
+                                maxHeight: 'none',
+                                pointerEvents: 'none',
+                                userSelect: 'none',
+                              }}
+                            />
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* Live Participant Name rendered directly on Flyer */}
+                    {template && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: `${template.name_x * 100}%`,
+                          top: `${(template.name_y + nameOffsetY) * 100}%`,
+                          width: `${template.name_width * 100}%`,
+                          color: template.text_color || '#FFFFFF',
+                          fontFamily: template.font_family,
+                          fontWeight: template.font_weight as any,
+                          textAlign: template.text_alignment || 'center',
+                        }}
+                        className="truncate font-bold text-xs pointer-events-none drop-shadow px-2 z-10"
+                      >
+                        {fullName.trim() || 'Your Name Here'}
+                      </div>
+                    )}
 
                     {/* Drag Helper Tip Badge */}
-                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-[#111126]/85 backdrop-blur-md text-white text-[10px] font-medium px-3 py-1 rounded-full pointer-events-none shadow flex items-center gap-1.5">
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-[#111126]/85 backdrop-blur-md text-white text-[10px] font-medium px-3 py-1 rounded-full pointer-events-none shadow flex items-center gap-1.5 z-20 whitespace-nowrap">
                       <Move className="w-3 h-3 text-[#9638F5]" />
-                      <span>Drag to center face · Zoom to fill circle</span>
+                      <span>Drag directly on flyer to center head · Zoom to fit</span>
                     </div>
                   </div>
 
