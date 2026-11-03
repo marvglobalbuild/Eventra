@@ -4,6 +4,9 @@
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    color: #111126;
   }
 }
 
@@ -23,6 +26,75 @@
   background: #CBD5E1;
 }
 
+/* Entrance Animations */
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes zoomIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.animate-fade-in-down {
+  animation: fadeInDown 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s ease backwards;
+}
+
+.animate-zoom-in {
+  animation: zoomIn 0.65s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.delay-75 { animation-delay: 75ms; }
+.delay-100 { animation-delay: 100ms; }
+.delay-150 { animation-delay: 150ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-250 { animation-delay: 250ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-400 { animation-delay: 400ms; }
+.delay-500 { animation-delay: 500ms; }
+.delay-600 { animation-delay: 600ms; }
+
 /* Interactive Motion & Keyframes */
 @keyframes floatSlow {
   0%, 100% {
@@ -30,6 +102,15 @@
   }
   50% {
     transform: translateY(-8px);
+  }
+}
+
+@keyframes floatSlight {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(0.5deg);
   }
 }
 
@@ -54,7 +135,7 @@
 @keyframes scaleUp {
   0% {
     opacity: 0;
-    transform: scale(0.95);
+    transform: scale(0.96);
   }
   100% {
     opacity: 1;
@@ -90,6 +171,10 @@
   animation: floatSlow 4s ease-in-out 2s infinite;
 }
 
+.animate-float-slight {
+  animation: floatSlight 5s ease-in-out infinite;
+}
+
 .animate-pulse-glow {
   animation: pulseGlow 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
@@ -112,9 +197,16 @@
 }
 
 .interactive-btn {
-  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .interactive-btn:active {
   transform: scale(0.97);
 }
 
+/* Glassmorphism utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(233, 232, 240, 0.8);
+}

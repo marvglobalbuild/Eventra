@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../lib/storage-and-db';
 import { resolveFlyerSource } from '../lib/supabase';
+import confetti from 'canvas-confetti';
+import { createSampleFlyerDataUrl } from '../lib/sample-flyers';
+import { storeFileInIDB } from '../lib/storage-and-db';
 import { useAuth } from '../context/AuthContext';
 import { FlyerEvent, OrganisationMember, Participant, FlyerDownload } from '../types/database';
 import { SupabaseModal } from '../components/SupabaseModal';
@@ -127,7 +130,116 @@ export const Dashboard: React.FC = () => {
     const url = `${origin}/e/${slug}`;
     navigator.clipboard.writeText(url);
     setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+    try {
+      confetti({
+        particleCount: 30,
+        spread: 55,
+        origin: { y: 0.65 },
+        colors: ['#6425E8', '#10B981', '#38BDF8'],
+      });
+    } catch {}
+    setTimeout(() => setCopiedId(null), 2500);
+  };
+
+  const handleToggleStatus = (ev: EventWithMetrics) => {
+    const nextStatus = ev.status === 'published' ? 'draft' : 'published';
+    db.saveEvent({ ...ev, status: nextStatus, updated_at: new Date().toISOString() });
+    if (nextStatus === 'published') {
+      try {
+        confetti({
+          particleCount: 35,
+          spread: 60,
+          origin: { y: 0.6 },
+          colors: ['#10B981', '#6425E8', '#F59E0B'],
+        });
+      } catch {}
+    }
+    loadDashboardData();
+  };
+
+  const handleQuickStartSampleEvent = async () => {
+    setLoading(true);
+    try {
+      const flyerDataUrl = createSampleFlyerDataUrl('tech');
+      const evId = `ev_${Date.now()}`;
+      const slug = `next-horizon-2026-${Math.random().toString(36).substring(2, 6)}`;
+      const storageKey = `flyers/${evId}.png`;
+      await storeFileInIDB(storageKey, flyerDataUrl);
+
+      db.saveEvent({
+        id: evId,
+        user_id: user?.id || 'usr_local',
+        org_id: currentOrg?.id || 'org_local',
+        event_name: 'Next Horizon Tech Summit 2026',
+        slug: slug,
+        original_flyer_path: storageKey,
+        original_flyer_data_url: '',
+        category: 'Technology & Business',
+        venue: 'Moscone Center, San Francisco & Virtual',
+        event_date: 'November 14-16, 2026',
+        status: 'published',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      db.saveTemplate({
+        id: `tmpl_${evId}`,
+        event_id: evId,
+        photo_x: 0.35,
+        photo_y: 0.28,
+        photo_width: 0.30,
+        photo_height: 0.30,
+        photo_shape: 'circle',
+        name_x: 0.15,
+        name_y: 0.60,
+        name_width: 0.70,
+        name_height: 0.08,
+        font_family: 'Plus Jakarta Sans, sans-serif',
+        font_size: 44,
+        font_weight: '700',
+        text_color: '#FFFFFF',
+        text_alignment: 'center',
+        max_lines: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      db.addParticipant({
+        id: `part_${Date.now()}_1`,
+        event_id: evId,
+        full_name: 'Elena Rostova',
+        photo_path: null,
+        created_at: new Date().toISOString(),
+      });
+      db.addParticipant({
+        id: `part_${Date.now()}_2`,
+        event_id: evId,
+        full_name: 'Marcus Chen',
+        photo_path: null,
+        created_at: new Date().toISOString(),
+      });
+
+      db.recordDownload({
+        id: `dl_${Date.now()}_1`,
+        event_id: evId,
+        participant_id: `part_${Date.now()}_1`,
+        format: 'png',
+        downloaded_at: new Date().toISOString(),
+      });
+
+      try {
+        confetti({
+          particleCount: 65,
+          spread: 80,
+          origin: { y: 0.5 },
+          colors: ['#6425E8', '#9638F5', '#10B981', '#38BDF8'],
+        });
+      } catch {}
+      await loadDashboardData();
+    } catch (err) {
+      console.error('Failed to create sample event:', err);
+      setLoading(false);
+    }
   };
 
   const handleDeleteEvent = (id: string, name: string) => {
@@ -173,7 +285,7 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#F8F8FC] text-[#111126] flex flex-col font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8]">
       {/* SaaS Top Header */}
-      <header className="h-16 bg-white border-b border-[#E9E8F0] sticky top-0 z-40 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+      <header className="h-16 bg-white border-b border-[#E9E8F0] sticky top-0 z-40 px-4 sm:px-6 lg:px-8 flex items-center justify-between animate-fade-in-down">
         <div className="flex items-center space-x-3 sm:space-x-6">
           {/* Mobile Menu Trigger */}
           <button
@@ -215,7 +327,7 @@ export const Dashboard: React.FC = () => {
         <nav className="hidden md:flex items-center space-x-1">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
+            className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${
               activeTab === 'overview'
                 ? 'bg-[#6425E8]/10 text-[#6425E8]'
                 : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
@@ -225,7 +337,7 @@ export const Dashboard: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('events')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
+            className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${
               activeTab === 'events'
                 ? 'bg-[#6425E8]/10 text-[#6425E8]'
                 : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
@@ -235,7 +347,7 @@ export const Dashboard: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('participants')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
+            className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${
               activeTab === 'participants'
                 ? 'bg-[#6425E8]/10 text-[#6425E8]'
                 : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
@@ -245,7 +357,7 @@ export const Dashboard: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
+            className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${
               activeTab === 'analytics'
                 ? 'bg-[#6425E8]/10 text-[#6425E8]'
                 : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
@@ -255,7 +367,7 @@ export const Dashboard: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('team')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
+            className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${
               activeTab === 'team'
                 ? 'bg-[#6425E8]/10 text-[#6425E8]'
                 : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
@@ -265,7 +377,7 @@ export const Dashboard: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('settings')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
+            className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${
               activeTab === 'settings'
                 ? 'bg-[#6425E8]/10 text-[#6425E8]'
                 : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
@@ -279,7 +391,7 @@ export const Dashboard: React.FC = () => {
         <div className="flex items-center space-x-2.5 sm:space-x-3">
           <button
             onClick={() => navigate('/create-event')}
-            className="px-3.5 sm:px-4 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer active:scale-[0.98]"
+            className="px-4 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-sm font-semibold rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer active:scale-[0.98]"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Create Event</span>
@@ -400,7 +512,7 @@ export const Dashboard: React.FC = () => {
       )}
 
       {/* Main Workspace Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-fade-in-up">
         {/* Purge Notification Banner if triggered */}
         {purgeNotice && (
           <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center justify-between">
@@ -423,23 +535,31 @@ export const Dashboard: React.FC = () => {
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#111126]">
                   Control Center
                 </h1>
-                <p className="text-xs text-[#73738A] mt-1">
+                <p className="text-sm text-[#525266] mt-1">
                   Manage flyer campaigns, monitor participant registrations, and distribute live generation links.
                 </p>
               </div>
 
               <div className="flex items-center space-x-2.5">
                 <button
+                  onClick={handleQuickStartSampleEvent}
+                  className="interactive-btn px-3.5 py-2 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 hover:border-[#6425E8]/40 text-sm font-semibold text-[#6425E8] rounded-xl transition flex items-center space-x-1.5 shadow-2xs"
+                  title="Create a live sample campaign with 1 click"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-[#6425E8]" />
+                  <span>⚡ Sample Event</span>
+                </button>
+                <button
                   onClick={handlePurgeAllDummyData}
                   title="Purge legacy dummy mock data"
-                  className="px-3 py-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-xs font-semibold text-[#73738A] hover:text-[#111126] rounded-xl transition flex items-center space-x-1.5"
+                  className="px-3.5 py-2 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-sm font-semibold text-[#525266] hover:text-[#111126] rounded-xl transition flex items-center space-x-1.5"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Sync Clean State</span>
                 </button>
                 <button
                   onClick={() => navigate('/create-event')}
-                  className="px-4 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1.5"
+                  className="px-4 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-sm font-semibold rounded-xl shadow-xs transition flex items-center space-x-1.5"
                 >
                   <Plus className="w-4 h-4" />
                   <span>New Flyer Campaign</span>
@@ -449,63 +569,89 @@ export const Dashboard: React.FC = () => {
 
             {/* KPI Metric Cards (Zero-pill discipline, unboxed, subtle separators) */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs">
-                <span className="text-[11px] font-semibold text-[#73738A] uppercase tracking-wider block">
-                  Campaigns
-                </span>
+              <div 
+                onClick={() => setActiveTab('events')}
+                className="interactive-card bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs hover:border-[#6425E8]/40 hover:shadow-md cursor-pointer transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#525266] uppercase tracking-wider block group-hover:text-[#6425E8] transition-colors">
+                    Campaigns
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#73738A] group-hover:text-[#6425E8] group-hover:translate-x-0.5 transition-all" />
+                </div>
                 <div className="flex items-baseline space-x-2 mt-2">
                   <span className="text-3xl font-extrabold text-[#111126] font-mono tabular-nums">
                     {totalEvents}
                   </span>
-                  <span className="text-xs text-[#73738A]">total events</span>
+                  <span className="text-sm text-[#525266]">total events</span>
                 </div>
-                <div className="mt-2 pt-2 border-t border-[#E9E8F0]/70 flex items-center text-[11px] text-[#73738A]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5" />
+                <div className="mt-2 pt-2 border-t border-[#E9E8F0]/70 flex items-center text-xs text-[#525266]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
                   <span>{publishedEvents} published live</span>
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs">
-                <span className="text-[11px] font-semibold text-[#73738A] uppercase tracking-wider block">
-                  Flyers Generated
-                </span>
+              <div 
+                onClick={() => setActiveTab('participants')}
+                className="interactive-card bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs hover:border-[#6425E8]/40 hover:shadow-md cursor-pointer transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#525266] uppercase tracking-wider block group-hover:text-[#6425E8] transition-colors">
+                    Flyers Generated
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#73738A] group-hover:text-[#6425E8] group-hover:translate-x-0.5 transition-all" />
+                </div>
                 <div className="flex items-baseline space-x-2 mt-2">
                   <span className="text-3xl font-extrabold text-[#6425E8] font-mono tabular-nums">
                     {totalParticipants}
                   </span>
-                  <span className="text-xs text-[#73738A]">participants</span>
+                  <span className="text-sm text-[#525266]">participants</span>
                 </div>
-                <div className="mt-2 pt-2 border-t border-[#E9E8F0]/70 flex items-center text-[11px] text-[#73738A]">
+                <div className="mt-2 pt-2 border-t border-[#E9E8F0]/70 flex items-center text-xs text-[#525266]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500 mr-1.5" />
                   <span>Personalized attendee posters</span>
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs">
-                <span className="text-[11px] font-semibold text-[#73738A] uppercase tracking-wider block">
-                  Total Downloads
-                </span>
+              <div 
+                onClick={() => setActiveTab('analytics')}
+                className="interactive-card bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs hover:border-emerald-300 hover:shadow-md cursor-pointer transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#525266] uppercase tracking-wider block group-hover:text-emerald-600 transition-colors">
+                    Total Downloads
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#73738A] group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all" />
+                </div>
                 <div className="flex items-baseline space-x-2 mt-2">
                   <span className="text-3xl font-extrabold text-emerald-600 font-mono tabular-nums">
                     {totalDownloads}
                   </span>
-                  <span className="text-xs text-[#73738A]">files exported</span>
+                  <span className="text-sm text-[#525266]">files exported</span>
                 </div>
-                <div className="mt-2 pt-2 border-t border-[#E9E8F0]/70 flex items-center text-[11px] text-[#73738A]">
+                <div className="mt-2 pt-2 border-t border-[#E9E8F0]/70 flex items-center text-xs text-[#525266]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5" />
                   <span>PNG · JPG · PDF exports</span>
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs">
-                <span className="text-[11px] font-semibold text-[#73738A] uppercase tracking-wider block">
-                  Conversion Rate
-                </span>
+              <div 
+                onClick={() => setActiveTab('analytics')}
+                className="interactive-card bg-white p-5 rounded-2xl border border-[#E9E8F0] shadow-xs hover:border-[#6425E8]/40 hover:shadow-md cursor-pointer transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#525266] uppercase tracking-wider block group-hover:text-[#6425E8] transition-colors">
+                    Conversion Rate
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#73738A] group-hover:text-[#6425E8] group-hover:translate-x-0.5 transition-all" />
+                </div>
                 <div className="flex items-baseline space-x-2 mt-2">
                   <span className="text-3xl font-extrabold text-[#111126] font-mono tabular-nums">
                     {conversionRate}%
                   </span>
-                  <span className="text-xs text-[#73738A]">download efficiency</span>
+                  <span className="text-sm text-[#525266]">download efficiency</span>
                 </div>
-                <div className="mt-2 pt-2 border-t border-[#E9E8F0]/70 flex items-center text-[11px] text-[#73738A]">
+                <div className="mt-2 pt-2 border-t border-[#E9E8F0]/70 flex items-center text-xs text-[#525266]">
                   <span className="text-emerald-600 font-semibold">Self-service delivery</span>
                 </div>
               </div>
@@ -516,7 +662,7 @@ export const Dashboard: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-base font-bold text-[#111126]">Flyer Campaigns</h2>
-                  <p className="text-xs text-[#73738A]">Active self-service flyer portals created in your workspace.</p>
+                  <p className="text-sm text-[#525266] mt-0.5">Active self-service flyer portals created in your workspace.</p>
                 </div>
                 {totalEvents > 0 && (
                   <button
@@ -536,16 +682,23 @@ export const Dashboard: React.FC = () => {
                     <Layers className="w-7 h-7" />
                   </div>
                   <h3 className="text-base font-bold text-[#111126]">No event campaigns yet</h3>
-                  <p className="text-xs text-[#73738A] max-w-md mx-auto mt-1.5 leading-relaxed">
+                  <p className="text-sm text-[#525266] max-w-md mx-auto mt-2 leading-relaxed">
                     Your platform is live and clean. Upload your original event poster design, place the designated circular or rectangular photo box and name frame, and share your unique participant link.
                   </p>
                   <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
                     <button
                       onClick={() => navigate('/create-event')}
-                      className="w-full sm:w-auto px-5 py-2.5 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center justify-center space-x-2"
+                      className="interactive-btn w-full sm:w-auto px-5 py-2.5 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center justify-center space-x-2"
                     >
                       <Plus className="w-4 h-4" />
                       <span>Upload Your Event Flyer</span>
+                    </button>
+                    <button
+                      onClick={handleQuickStartSampleEvent}
+                      className="interactive-btn w-full sm:w-auto px-5 py-2.5 bg-white hover:bg-[#F8F8FC] border border-[#CBD5E1] text-[#111126] text-xs font-semibold rounded-xl shadow-xs transition flex items-center justify-center space-x-2 group"
+                    >
+                      <Sparkles className="w-4 h-4 text-[#6425E8] group-hover:scale-110 transition-transform" />
+                      <span>⚡ Quick-Start Sample Campaign</span>
                     </button>
                   </div>
                 </div>
@@ -571,10 +724,18 @@ export const Dashboard: React.FC = () => {
                           </div>
                         )}
                         <div className="absolute top-3 right-3">
-                          <span className="text-[11px] font-semibold text-[#111126] bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-md shadow-xs flex items-center space-x-1.5">
-                            <span className={`w-1.5 h-1.5 rounded-full ${ev.status === 'published' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleStatus(ev);
+                            }}
+                            title="Click to toggle status (Published / Draft)"
+                            className="text-[11px] font-semibold text-[#111126] bg-white/95 backdrop-blur-xs px-2.5 py-1 rounded-lg shadow-xs flex items-center space-x-1.5 hover:ring-2 hover:ring-[#6425E8]/30 transition active:scale-95 cursor-pointer"
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${ev.status === 'published' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
                             <span className="capitalize">{ev.status}</span>
-                          </span>
+                          </button>
                         </div>
                       </div>
 
@@ -605,7 +766,7 @@ export const Dashboard: React.FC = () => {
                         <div className="mt-4 pt-3 border-t border-[#E9E8F0] flex items-center space-x-2">
                           <button
                             onClick={() => navigate(`/editor/${ev.id}`)}
-                            className="flex-1 py-2 bg-[#F8F8FC] hover:bg-[#EEF0F6] text-[#111126] text-xs font-semibold rounded-xl border border-[#E9E8F0] transition flex items-center justify-center space-x-1.5"
+                            className="flex-1 py-2 bg-[#F8F8FC] hover:bg-[#EEF0F6] text-[#111126] text-sm font-semibold rounded-xl border border-[#E9E8F0] transition flex items-center justify-center space-x-1.5"
                           >
                             <Edit3 className="w-3.5 h-3.5 text-[#6425E8]" />
                             <span>Edit Frames</span>
@@ -641,7 +802,7 @@ export const Dashboard: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-[#111126]">Live Attendee Activity</h3>
-                  <p className="text-xs text-[#73738A]">Participants who have generated and downloaded personalized posters.</p>
+                  <p className="text-sm text-[#525266] mt-0.5">Participants who have generated and downloaded personalized posters.</p>
                 </div>
                 {participants.length > 0 && (
                   <button
@@ -828,10 +989,18 @@ export const Dashboard: React.FC = () => {
                         <Calendar className="w-8 h-8 opacity-30 text-[#73738A]" />
                       )}
                       <div className="absolute top-3 right-3">
-                        <span className="text-[11px] font-semibold text-[#111126] bg-white/95 backdrop-blur-xs px-2.5 py-1 rounded-md shadow-xs flex items-center space-x-1.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${ev.status === 'published' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleStatus(ev);
+                          }}
+                          title="Click to toggle status (Published / Draft)"
+                          className="text-[11px] font-semibold text-[#111126] bg-white/95 backdrop-blur-xs px-2.5 py-1 rounded-lg shadow-xs flex items-center space-x-1.5 hover:ring-2 hover:ring-[#6425E8]/30 transition active:scale-95 cursor-pointer"
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${ev.status === 'published' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
                           <span className="capitalize">{ev.status}</span>
-                        </span>
+                        </button>
                       </div>
                     </div>
 
@@ -859,7 +1028,7 @@ export const Dashboard: React.FC = () => {
                       <div className="mt-4 pt-3 border-t border-[#E9E8F0] flex items-center space-x-2">
                         <button
                           onClick={() => navigate(`/editor/${ev.id}`)}
-                          className="flex-1 py-2 bg-[#F8F8FC] hover:bg-[#EEF0F6] text-[#111126] text-xs font-semibold rounded-xl border border-[#E9E8F0] transition flex items-center justify-center space-x-1.5"
+                          className="flex-1 py-2 bg-[#F8F8FC] hover:bg-[#EEF0F6] text-[#111126] text-sm font-semibold rounded-xl border border-[#E9E8F0] transition flex items-center justify-center space-x-1.5"
                         >
                           <Edit3 className="w-3.5 h-3.5 text-[#6425E8]" />
                           <span>Configure</span>

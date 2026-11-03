@@ -188,7 +188,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const userOrg: Organisation = {
             id: `org_${data.user.id}`,
             name: data.user.user_metadata?.org_name || `${userProf.full_name}'s Workspace`,
-            slug: userProf.full_name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+            slug: (userProf.full_name || 'workspace').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
             owner_id: data.user.id,
             plan: 'professional',
             created_at: new Date().toISOString(),
