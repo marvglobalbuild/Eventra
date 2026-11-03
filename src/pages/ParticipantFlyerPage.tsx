@@ -154,6 +154,9 @@ export const ParticipantFlyerPage: React.FC = () => {
 
   useEffect(() => {
     fetchEvent();
+    if (slug) {
+      db.recordVisit(window.location.pathname, slug);
+    }
   }, [slug]);
 
   const fetchEvent = async () => {

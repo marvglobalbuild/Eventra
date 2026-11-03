@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import confetti from 'canvas-confetti';
 import { 
@@ -13,12 +13,17 @@ import { useAuth } from '../context/AuthContext';
 import { PLATFORM_MODULES } from '../lib/modules';
 import { ModulePreviewModal } from '../components/ModulePreviewModal';
 import { FeatureModule } from '../types/database';
+import { db } from '../lib/storage-and-db';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [demoStep, setDemoStep] = useState<'original' | 'upload' | 'completed'>('completed');
+
+  useEffect(() => {
+    db.recordVisit('/');
+  }, []);
   
   // Interactive live demo states
   const [demoName, setDemoName] = useState('Elena Rostova');

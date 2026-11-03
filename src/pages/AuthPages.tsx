@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { db } from '../lib/storage-and-db';
 import { EventraLogo } from '../components/EventraLogo';
 import { 
   Loader2, AlertCircle, Eye, EyeOff, 
@@ -31,6 +32,10 @@ const AuthContainer: React.FC<AuthContainerProps> = ({ initialMode }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    db.recordVisit(window.location.pathname);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

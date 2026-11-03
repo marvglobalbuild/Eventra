@@ -112,3 +112,73 @@ export interface FeatureModule {
   badge?: string;
   route?: string;
 }
+
+export interface SiteVisit {
+  id: string;
+  visitor_id: string; // Anonymous persistent visitor UUID
+  path: string;       // e.g. '/', '/e/worship-expression-40', '/login'
+  event_slug?: string;
+  referrer?: string;
+  device_type: 'desktop' | 'mobile' | 'tablet';
+  browser?: string;
+  timestamp: string;  // ISO string
+}
+
+export interface DailyVisitorTrend {
+  date: string;       // YYYY-MM-DD
+  label: string;      // e.g. 'Mon 03'
+  visits: number;
+  uniques: number;
+}
+
+export interface VisitorStats {
+  totalVisits: number;
+  uniqueVisitors: number;
+  visitsToday: number;
+  uniqueToday: number;
+  visitsThisWeek: number;
+  uniqueThisWeek: number;
+  conversionRate: number; // visitors -> generated attendees -> downloads
+  visitsByPath: Record<string, number>;
+  visitsByEventSlug: Record<string, number>;
+  dailyTrends: DailyVisitorTrend[];
+  recentVisits: SiteVisit[];
+  deviceBreakdown: {
+    desktop: number;
+    mobile: number;
+    tablet: number;
+  };
+}
+
+export interface AttendeeCrmRecord extends Participant {
+  event_name: string;
+  event_slug: string;
+  event_status: 'published' | 'draft' | 'archived';
+  downloads_count: number;
+  download_formats: string[];
+  last_download_at?: string;
+}
+
+export interface UserCrmRecord {
+  id: string;
+  email: string;
+  full_name: string;
+  org_id: string;
+  org_name: string;
+  created_at: string;
+  events_count: number;
+  total_attendees: number;
+  total_downloads: number;
+}
+
+export interface PlatformOverviewMetrics {
+  totalUniqueVisitors: number;
+  totalVisits: number;
+  visitorsToday: number;
+  totalOrganizers: number;
+  totalEvents: number;
+  publishedEvents: number;
+  totalAttendees: number;
+  totalDownloads: number;
+  conversionRate: number; // % of visitors who download flyers
+}

@@ -1,6 +1,7 @@
 import { 
   Profile, FlyerEvent, FlyerTemplate, Participant, FlyerDownload, 
-  Organisation, OrganisationMember 
+  Organisation, OrganisationMember, SiteVisit, VisitorStats,
+  AttendeeCrmRecord, UserCrmRecord, PlatformOverviewMetrics, DailyVisitorTrend 
 } from '../types/database';
 import { createSampleFlyerDataUrl } from './sample-flyers';
 
@@ -92,6 +93,8 @@ const LS_DOWNLOADS_KEY = 'eventra_downloads_list';
 const LS_SUPABASE_CONFIG = 'eventra_supabase_config';
 const LS_AUTH_SESSION = 'eventra_auth_session';
 const LS_ACCOUNTS_KEY = 'eventra_registered_accounts';
+const LS_VISITS_KEY = 'eventra_site_visits_log';
+const LS_VISITOR_ID_KEY = 'eventra_anonymous_visitor_id';
 
 export interface StoredAccount {
   id: string;
@@ -150,6 +153,33 @@ export function setAuthSession(email: string | null): void {
 }
 
 /**
+ * Detect client device classification
+ */
+function detectDeviceType(): 'desktop' | 'mobile' | 'tablet' {
+  if (typeof navigator === 'undefined') return 'desktop';
+  const ua = navigator.userAgent.toLowerCase();
+  if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) {
+    return 'tablet';
+  }
+  if (/mobile|android|iphone|ipod|blackberry|iemobile|kindle|opera m(obi|ini)/i.test(ua)) {
+    return 'mobile';
+  }
+  return 'desktop';
+}
+
+/**
+ * Retrieves or generates an anonymous, persistent UUID for visitor tracking
+ */
+export function getOrCreateVisitorId(): string {
+  let vid = safeLocalStorageGet(LS_VISITOR_ID_KEY);
+  if (!vid) {
+    vid = 'vis_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36);
+    safeLocalStorageSet(LS_VISITOR_ID_KEY, vid);
+  }
+  return vid;
+}
+
+/**
  * Safe localStorage setter that intercepts QuotaExceededError and performs
  * automatic cleanup of legacy oversized entries, so the application never crashes.
  */
@@ -191,13 +221,13 @@ export function safeLocalStorageSet(key: string, value: string): void {
         } catch {}
       }
 
-      // 3. Trim download history to latest 25 items
+      // 3. Trim download history to latest 50 items
       const rawDownloads = localStorage.getItem(LS_DOWNLOADS_KEY);
       if (rawDownloads) {
         try {
           const dl: FlyerDownload[] = JSON.parse(rawDownloads);
-          if (dl.length > 25) {
-            localStorage.setItem(LS_DOWNLOADS_KEY, JSON.stringify(dl.slice(0, 25)));
+          if (dl.length > 50) {
+            localStorage.setItem(LS_DOWNLOADS_KEY, JSON.stringify(dl.slice(0, 50)));
           }
         } catch {}
       }
@@ -366,6 +396,9 @@ export async function initializeLocalData(): Promise<void> {
   }
   if (!safeLocalStorageGet(LS_DOWNLOADS_KEY)) {
     safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify([]));
+  }
+  if (!safeLocalStorageGet(LS_VISITS_KEY)) {
+    safeLocalStorageSet(LS_VISITS_KEY, JSON.stringify([]));
   }
 }
 
@@ -544,7 +577,7 @@ export const db = {
   addParticipant(participant: Participant): Participant {
     const list = this.getParticipants();
     list.unshift(participant);
-    safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify(list.slice(0, 50))); // Cap to latest 50 to prevent overflow
+    safeLocalStorageSet(LS_PARTICIPANTS_KEY, JSON.stringify(list.slice(0, 500))); // Retain up to 500 records
     return participant;
   },
 
@@ -558,8 +591,289 @@ export const db = {
   recordDownload(download: FlyerDownload): FlyerDownload {
     const list = this.getDownloads();
     list.push(download);
-    safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify(list.slice(-50))); // Cap to latest 50
+    safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify(list.slice(-500))); // Retain up to 500 downloads
     return download;
+  },
+
+  // ----------------------------------------------------
+  // VISITOR LOGGING & REAL-TIME TELEMETRY
+  // ----------------------------------------------------
+  recordVisit(path: string, eventSlug?: string): SiteVisit {
+    const visitorId = getOrCreateVisitorId();
+    const raw = safeLocalStorageGet(LS_VISITS_KEY);
+    const visits: SiteVisit[] = raw ? JSON.parse(raw) : [];
+
+    const now = new Date();
+    const visit: SiteVisit = {
+      id: `vis_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      visitor_id: visitorId,
+      path: path || (typeof window !== 'undefined' ? window.location.pathname : '/'),
+      event_slug: eventSlug,
+      referrer: typeof document !== 'undefined' && document.referrer ? document.referrer : undefined,
+      device_type: detectDeviceType(),
+      browser: typeof navigator !== 'undefined'
+        ? navigator.userAgent.includes('Edg')
+          ? 'Edge'
+          : navigator.userAgent.includes('Chrome')
+          ? 'Chrome'
+          : navigator.userAgent.includes('Firefox')
+          ? 'Firefox'
+          : navigator.userAgent.includes('Safari')
+          ? 'Safari'
+          : 'Browser'
+        : 'Browser',
+      timestamp: now.toISOString(),
+    };
+
+    // Prepend and cap at latest 1,000 site visits to preserve storage
+    visits.unshift(visit);
+    safeLocalStorageSet(LS_VISITS_KEY, JSON.stringify(visits.slice(0, 1000)));
+
+    return visit;
+  },
+
+  getVisitorStats(): VisitorStats {
+    const raw = safeLocalStorageGet(LS_VISITS_KEY);
+    const visits: SiteVisit[] = raw ? JSON.parse(raw) : [];
+
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const uniqueAll = new Set<string>();
+    const uniqueToday = new Set<string>();
+    const uniqueWeek = new Set<string>();
+
+    let visitsToday = 0;
+    let visitsThisWeek = 0;
+    const visitsByPath: Record<string, number> = {};
+    const visitsByEventSlug: Record<string, number> = {};
+    const deviceBreakdown = { desktop: 0, mobile: 0, tablet: 0 };
+
+    // Initialize 7-day trend buckets
+    const trendMap = new Map<string, { date: string; label: string; visits: number; uniques: Set<string> }>();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const dateKey = d.toISOString().slice(0, 10);
+      const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      trendMap.set(dateKey, { date: dateKey, label: dayLabel, visits: 0, uniques: new Set<string>() });
+    }
+
+    for (const v of visits) {
+      uniqueAll.add(v.visitor_id);
+      const vDate = v.timestamp ? v.timestamp.slice(0, 10) : '';
+      const vTime = new Date(v.timestamp || 0);
+
+      if (vDate === todayStr) {
+        visitsToday++;
+        uniqueToday.add(v.visitor_id);
+      }
+      if (vTime >= oneWeekAgo) {
+        visitsThisWeek++;
+        uniqueWeek.add(v.visitor_id);
+      }
+
+      // Path distribution
+      const p = v.path || '/';
+      visitsByPath[p] = (visitsByPath[p] || 0) + 1;
+
+      // Event slug distribution
+      if (v.event_slug) {
+        visitsByEventSlug[v.event_slug] = (visitsByEventSlug[v.event_slug] || 0) + 1;
+      }
+
+      // Device breakdown
+      if (v.device_type === 'mobile') deviceBreakdown.mobile++;
+      else if (v.device_type === 'tablet') deviceBreakdown.tablet++;
+      else deviceBreakdown.desktop++;
+
+      // 7-day trend aggregation
+      if (trendMap.has(vDate)) {
+        const item = trendMap.get(vDate)!;
+        item.visits++;
+        item.uniques.add(v.visitor_id);
+      }
+    }
+
+    const dailyTrends: DailyVisitorTrend[] = Array.from(trendMap.values()).map((item) => ({
+      date: item.date,
+      label: item.label,
+      visits: item.visits,
+      uniques: item.uniques.size,
+    }));
+
+    // Overall conversion rate
+    const totalDownloads = this.getDownloads().length;
+    const uniqueCount = uniqueAll.size;
+    const conversionRate = uniqueCount > 0 
+      ? Math.min(100, Math.round((totalDownloads / uniqueCount) * 100))
+      : 0;
+
+    return {
+      totalVisits: visits.length,
+      uniqueVisitors: uniqueAll.size,
+      visitsToday,
+      uniqueToday: uniqueToday.size,
+      visitsThisWeek,
+      uniqueThisWeek: uniqueWeek.size,
+      conversionRate,
+      visitsByPath,
+      visitsByEventSlug,
+      dailyTrends,
+      recentVisits: visits.slice(0, 50),
+      deviceBreakdown,
+    };
+  },
+
+  // ----------------------------------------------------
+  // CRM ATTENDEE & USER DIRECTORY METHODS
+  // ----------------------------------------------------
+  getAllParticipantsCRM(): AttendeeCrmRecord[] {
+    const participants = this.getParticipants();
+    const events = this.getEvents();
+    const downloads = this.getDownloads();
+
+    const eventMap = new Map<string, FlyerEvent>();
+    events.forEach((e) => eventMap.set(e.id, e));
+
+    const dlMap = new Map<string, FlyerDownload[]>();
+    downloads.forEach((d) => {
+      if (d.participant_id) {
+        const arr = dlMap.get(d.participant_id) || [];
+        arr.push(d);
+        dlMap.set(d.participant_id, arr);
+      }
+    });
+
+    return participants.map((p) => {
+      const ev = eventMap.get(p.event_id);
+      const pDls = dlMap.get(p.id) || [];
+      const formats = Array.from(new Set(pDls.map((d) => d.format)));
+      const latestDl = [...pDls].sort(
+        (a, b) => new Date(b.downloaded_at).getTime() - new Date(a.downloaded_at).getTime()
+      )[0];
+
+      return {
+        ...p,
+        event_name: ev ? ev.event_name : 'Unknown Event',
+        event_slug: ev ? ev.slug : '',
+        event_status: ev ? ev.status : 'draft',
+        downloads_count: pDls.length,
+        download_formats: formats,
+        last_download_at: latestDl?.downloaded_at,
+      };
+    });
+  },
+
+  getAllUsersCRM(): UserCrmRecord[] {
+    const accounts = getStoredAccounts();
+    const events = this.getEvents();
+    const participants = this.getParticipants();
+    const downloads = this.getDownloads();
+
+    const currentProf = this.getCurrentProfile();
+    const currentOrg = this.getCurrentOrganisation();
+
+    const userMap = new Map<string, UserCrmRecord>();
+
+    accounts.forEach((acc) => {
+      const userEvents = events.filter((e) => e.user_id === acc.id || (acc.org_id && e.org_id === acc.org_id));
+      const userEventIds = new Set(userEvents.map((e) => e.id));
+      const userParts = participants.filter((p) => userEventIds.has(p.event_id));
+      const userDls = downloads.filter((d) => userEventIds.has(d.event_id));
+
+      userMap.set(acc.email.toLowerCase(), {
+        id: acc.id,
+        email: acc.email,
+        full_name: acc.full_name,
+        org_id: acc.org_id,
+        org_name: acc.org_name,
+        created_at: acc.created_at,
+        events_count: userEvents.length,
+        total_attendees: userParts.length,
+        total_downloads: userDls.length,
+      });
+    });
+
+    // Include current session profile if not already captured
+    if (currentProf && currentProf.email && !userMap.has(currentProf.email.toLowerCase())) {
+      const userEvents = events.filter(
+        (e) => e.user_id === currentProf.id || (currentOrg && e.org_id === currentOrg.id)
+      );
+      const userEventIds = new Set(userEvents.map((e) => e.id));
+      const userParts = participants.filter((p) => userEventIds.has(p.event_id));
+      const userDls = downloads.filter((d) => userEventIds.has(d.event_id));
+
+      userMap.set(currentProf.email.toLowerCase(), {
+        id: currentProf.id,
+        email: currentProf.email,
+        full_name: currentProf.full_name || 'Software Owner',
+        org_id: currentProf.current_org_id || currentOrg?.id || 'org_main',
+        org_name: currentOrg?.name || 'Primary Workspace',
+        created_at: currentProf.created_at || new Date().toISOString(),
+        events_count: userEvents.length,
+        total_attendees: userParts.length,
+        total_downloads: userDls.length,
+      });
+    }
+
+    return Array.from(userMap.values());
+  },
+
+  getPlatformOverviewMetrics(): PlatformOverviewMetrics {
+    const stats = this.getVisitorStats();
+    const events = this.getEvents();
+    const attendees = this.getParticipants();
+    const downloads = this.getDownloads();
+    const users = this.getAllUsersCRM();
+
+    const published = events.filter((e) => e.status === 'published').length;
+    const convRate = stats.uniqueVisitors > 0 
+      ? Math.min(100, Math.round((downloads.length / stats.uniqueVisitors) * 100))
+      : attendees.length > 0 
+        ? Math.min(100, Math.round((downloads.length / attendees.length) * 100))
+        : 0;
+
+    return {
+      totalUniqueVisitors: stats.uniqueVisitors,
+      totalVisits: stats.totalVisits,
+      visitorsToday: stats.uniqueToday,
+      totalOrganizers: Math.max(users.length, 1),
+      totalEvents: events.length,
+      publishedEvents: published,
+      totalAttendees: attendees.length,
+      totalDownloads: downloads.length,
+      conversionRate: convRate,
+    };
+  },
+
+  clearVisitorLogs(): void {
+    safeLocalStorageSet(LS_VISITS_KEY, JSON.stringify([]));
+  },
+
+  seedDemoVisits(): void {
+    const sampleVisits: SiteVisit[] = [];
+    const devices: ('desktop' | 'mobile' | 'tablet')[] = ['mobile', 'mobile', 'desktop', 'mobile', 'desktop', 'tablet'];
+    const paths = ['/', '/e/worship-expression-40', '/', '/login', '/register', '/e/worship-expression-40'];
+    const now = Date.now();
+
+    for (let i = 0; i < 48; i++) {
+      const hoursAgo = Math.floor(Math.random() * 140);
+      const time = new Date(now - hoursAgo * 3600 * 1000);
+      const visitorNum = Math.floor(Math.random() * 20) + 1;
+      sampleVisits.push({
+        id: `vis_demo_${Date.now()}_${i}`,
+        visitor_id: `vis_anon_${visitorNum}`,
+        path: paths[i % paths.length],
+        event_slug: paths[i % paths.length].includes('/e/') ? 'worship-expression-40' : undefined,
+        referrer: i % 3 === 0 ? 'https://instagram.com' : i % 5 === 0 ? 'https://whatsapp.com' : undefined,
+        device_type: devices[i % devices.length],
+        browser: 'Mobile Safari',
+        timestamp: time.toISOString(),
+      });
+    }
+
+    safeLocalStorageSet(LS_VISITS_KEY, JSON.stringify(sampleVisits));
   },
 
   purgeDummyData(): { removedEvents: number; removedParticipants: number } {
@@ -593,3 +907,22 @@ export const db = {
     safeLocalStorageSet(LS_DOWNLOADS_KEY, JSON.stringify([]));
   },
 };
+
+/**
+ * Utility to generate downloadable CSV string for CRM attendee export
+ */
+export function exportAttendeesToCSV(attendees: AttendeeCrmRecord[]): string {
+  const headers = ['Attendee Name', 'Event Name', 'Event Slug', 'Status', 'Has Photo', 'Downloads', 'Formats', 'Created At', 'Last Downloaded At'];
+  const rows = attendees.map((a) => [
+    `"${(a.full_name || '').replace(/"/g, '""')}"`,
+    `"${(a.event_name || '').replace(/"/g, '""')}"`,
+    `"${(a.event_slug || '').replace(/"/g, '""')}"`,
+    `"${a.event_status}"`,
+    a.photo_path ? 'Yes' : 'No',
+    a.downloads_count,
+    `"${a.download_formats.join(', ')}"`,
+    `"${a.created_at}"`,
+    `"${a.last_download_at || ''}"`,
+  ]);
+  return [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+}

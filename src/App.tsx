@@ -7,6 +7,7 @@ import { Dashboard } from './pages/Dashboard';
 import { CreateEvent } from './pages/CreateEvent';
 import { TemplateEditor } from './pages/TemplateEditor';
 import { ParticipantFlyerPage } from './pages/ParticipantFlyerPage';
+import { AdminCRM } from './pages/AdminCRM';
 
 const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -91,6 +92,40 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <TemplateEditor />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Dedicated Platform Owner CMS / CRM & Telemetry Hub */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminCRM />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/crm"
+            element={
+              <ProtectedRoute>
+                <AdminCRM />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/admin"
+            element={
+              <ProtectedRoute>
+                <AdminCRM />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/crm"
+            element={
+              <ProtectedRoute>
+                <AdminCRM />
               </ProtectedRoute>
             }
           />

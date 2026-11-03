@@ -14,7 +14,7 @@ import {
   LogOut, Copy, Check, Search, Trash2, Edit3, 
   Layers, BarChart3, Building2, UserPlus,
   Compass, LayoutGrid, List, CheckCircle2, ChevronRight, Menu, X,
-  Share2, Shield, RefreshCw, Sparkles, Clock, Globe, ArrowUpRight
+  Share2, Shield, RefreshCw, Sparkles, Clock, Globe, ArrowUpRight, Activity
 } from 'lucide-react';
 
 interface EventWithMetrics extends FlyerEvent {
@@ -56,6 +56,8 @@ export const Dashboard: React.FC = () => {
   const [orgSavedNotice, setOrgSavedNotice] = useState(false);
 
   useEffect(() => {
+    // Record workspace visit telemetry
+    db.recordVisit('/dashboard');
     // Purge any legacy dummy mock data automatically on first load
     db.purgeDummyData();
     loadDashboardData();
@@ -390,6 +392,15 @@ export const Dashboard: React.FC = () => {
         {/* Right Action Bar */}
         <div className="flex items-center space-x-2.5 sm:space-x-3">
           <button
+            onClick={() => navigate('/admin')}
+            className="hidden sm:flex items-center space-x-1.5 px-3 py-2 bg-[#6425E8]/10 hover:bg-[#6425E8]/20 text-[#6425E8] text-xs font-bold rounded-xl transition cursor-pointer"
+            title="Open Platform Owner CMS & Visitor CRM"
+          >
+            <Activity className="w-3.5 h-3.5" />
+            <span>Owner CMS & CRM</span>
+          </button>
+
+          <button
             onClick={() => navigate('/create-event')}
             className="px-4 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-sm font-semibold rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer active:scale-[0.98]"
           >
@@ -495,6 +506,13 @@ export const Dashboard: React.FC = () => {
                   <Settings className="w-4 h-4" />
                   <span>Settings</span>
                 </button>
+                <button
+                  onClick={() => { navigate('/admin'); setMobileMenuOpen(false); }}
+                  className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-bold rounded-xl bg-[#6425E8]/10 text-[#6425E8] mt-2"
+                >
+                  <Activity className="w-4 h-4" />
+                  <span>Owner CMS & CRM</span>
+                </button>
               </div>
             </div>
 
@@ -565,6 +583,31 @@ export const Dashboard: React.FC = () => {
                   <span>New Flyer Campaign</span>
                 </button>
               </div>
+            </div>
+
+            {/* Owner CMS & CRM Access Banner */}
+            <div className="bg-gradient-to-r from-purple-50 via-[#6425E8]/5 to-sky-50 border border-[#6425E8]/20 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-xs">
+              <div className="flex items-center space-x-3.5">
+                <div className="p-2.5 bg-[#6425E8] text-white rounded-xl shadow-xs shrink-0">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-sm font-bold text-[#111126]">Software Owner CMS & Telemetry</h3>
+                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-md">Live Platform Monitor</span>
+                  </div>
+                  <p className="text-xs text-[#525266] mt-0.5">
+                    Track unique visitors, page impressions, registered organizers, and manage your global attendee CRM.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/admin')}
+                className="px-4 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center justify-center space-x-1.5 self-start sm:self-auto cursor-pointer whitespace-nowrap"
+              >
+                <span>Open Owner CMS & CRM</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
             </div>
 
             {/* KPI Metric Cards (Zero-pill discipline, unboxed, subtle separators) */}
