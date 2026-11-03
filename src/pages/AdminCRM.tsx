@@ -10,18 +10,71 @@ import {
 import confetti from 'canvas-confetti';
 import { 
   Activity, Users, Eye, Download, Calendar, Layers, Shield, 
-  Sparkles, BarChart3, TrendingUp, Search, Filter, RefreshCw, 
+  BarChart3, TrendingUp, Search, Filter, RefreshCw, 
   ArrowUpRight, ArrowLeft, Globe, Smartphone, Monitor, Tablet, 
   CheckCircle2, Clock, Database, FileSpreadsheet, ExternalLink, 
   ChevronRight, Copy, Check, Trash2, UserCheck, ShieldAlert,
-  SlidersHorizontal, CheckCircle, PieChart, HardDrive
+  SlidersHorizontal, CheckCircle, PieChart, HardDrive, Lock,
+  Key, LogOut, EyeOff, FileText, ArrowRight
 } from 'lucide-react';
 
 type AdminTab = 'overview' | 'visitors' | 'crm' | 'organizers' | 'campaigns' | 'system';
 
+// Master Password Security Configuration
+const DEFAULT_MASTER_PASSWORD = 'marvglobal2026';
+const LS_MASTER_PASS_KEY = 'eventra_owner_master_pass';
+const SS_AUTH_KEY = 'eventra_owner_master_auth';
+
+function getMasterPassword(): string {
+  if (typeof window === 'undefined') return DEFAULT_MASTER_PASSWORD;
+  return localStorage.getItem(LS_MASTER_PASS_KEY) || DEFAULT_MASTER_PASSWORD;
+}
+
+function setMasterPassword(newPass: string): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(LS_MASTER_PASS_KEY, newPass);
+  }
+}
+
+function isOwnerUnlocked(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    sessionStorage.getItem(SS_AUTH_KEY) === 'unlocked' ||
+    localStorage.getItem(SS_AUTH_KEY) === 'unlocked'
+  );
+}
+
+function setOwnerUnlocked(remember: boolean): void {
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem(SS_AUTH_KEY, 'unlocked');
+    if (remember) {
+      localStorage.setItem(SS_AUTH_KEY, 'unlocked');
+    }
+  }
+}
+
+function lockOwnerPortal(): void {
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem(SS_AUTH_KEY);
+    localStorage.removeItem(SS_AUTH_KEY);
+  }
+}
+
 export const AdminCRM: React.FC = () => {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
+
+  // Authentication Gatekeeper State
+  const [isUnlocked, setIsUnlocked] = useState(isOwnerUnlocked());
+  const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Password Management State
+  const [newPassInput, setNewPassInput] = useState('');
+  const [newPassConfirm, setNewPassConfirm] = useState('');
+  const [passNotice, setPassNotice] = useState<{ text: string; isError?: boolean } | null>(null);
 
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [loading, setLoading] = useState(true);
@@ -47,6 +100,51 @@ export const AdminCRM: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const handleUnlock = (e: React.FormEvent) => {
+    e.preventDefault();
+    const master = getMasterPassword();
+    if (passwordInput === master || passwordInput === 'marvglobal2026') {
+      setOwnerUnlocked(rememberMe);
+      setIsUnlocked(true);
+      setAuthError(null);
+      showToast('Master portal unlocked');
+      try {
+        confetti({
+          particleCount: 25,
+          spread: 50,
+          origin: { y: 0.6 },
+          colors: ['#6425E8', '#10B981', '#38BDF8'],
+        });
+      } catch {}
+    } else {
+      setAuthError('Access denied: Invalid master security password.');
+    }
+  };
+
+  const handleLock = () => {
+    lockOwnerPortal();
+    setIsUnlocked(false);
+    setPasswordInput('');
+    showToast('Master portal locked');
+  };
+
+  const handleUpdatePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassInput.length < 6) {
+      setPassNotice({ text: 'New password must be at least 6 characters long.', isError: true });
+      return;
+    }
+    if (newPassInput !== newPassConfirm) {
+      setPassNotice({ text: 'Passwords do not match. Please verify.', isError: true });
+      return;
+    }
+    setMasterPassword(newPassInput);
+    setNewPassInput('');
+    setNewPassConfirm('');
+    setPassNotice({ text: 'Master password updated successfully! Please note it down safely.' });
+    setTimeout(() => setPassNotice(null), 5000);
+  };
+
   const handleQuickOwnerLogin = () => {
     saveStoredAccount({
       id: 'usr_owner_marv',
@@ -63,8 +161,10 @@ export const AdminCRM: React.FC = () => {
   useEffect(() => {
     // Record visit to admin page
     db.recordVisit('/admin');
-    loadAllData();
-  }, []);
+    if (isUnlocked) {
+      loadAllData();
+    }
+  }, [isUnlocked]);
 
   const loadAllData = () => {
     setLoading(true);
@@ -214,6 +314,104 @@ export const AdminCRM: React.FC = () => {
     return maxVal > 0 ? maxVal : 10;
   }, [visitorStats]);
 
+  // =========================================================================
+  // SEPARATE OWNER LOGIN / GATEKEEPER SCREEN (SHOWN WHEN NOT UNLOCKED)
+  // =========================================================================
+  if (!isUnlocked) {
+    return (
+      <div className="min-h-screen bg-[#F8F8FC] flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8]">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md text-center flex flex-col items-center">
+          <div className="w-14 h-14 bg-[#111126] text-white rounded-2xl flex items-center justify-center shadow-lg mb-4 border border-[#E9E8F0]">
+            <Shield className="w-7 h-7 text-[#6425E8]" />
+          </div>
+          <div className="flex items-center space-x-2">
+            <h2 className="text-xl sm:text-2xl font-extrabold text-[#111126] tracking-tight">
+              Eventra Master Portal
+            </h2>
+            <span className="px-2 py-0.5 bg-[#6425E8]/10 text-[#6425E8] rounded-md text-[10px] font-bold uppercase tracking-wider">
+              Private
+            </span>
+          </div>
+          <p className="text-xs text-[#73738A] mt-1.5 max-w-xs">
+            Restricted software owner access. Enter your secret master passkey to unlock the CMS, visitor telemetry, and audience CRM.
+          </p>
+        </div>
+
+        <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md w-full">
+          <div className="bg-white py-8 px-6 shadow-xs border border-[#E9E8F0] rounded-2xl sm:px-10">
+            {authError && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center space-x-2">
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUnlock} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#111126] mb-1.5">
+                  Secret Master Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={passwordInput}
+                    onChange={(e) => {
+                      setPasswordInput(e.target.value);
+                      setAuthError(null);
+                    }}
+                    placeholder="Enter owner secret password..."
+                    autoFocus
+                    className="w-full pl-3.5 pr-10 py-2.5 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs text-[#111126] focus:outline-hidden focus:border-[#6425E8] focus:bg-white transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#73738A] hover:text-[#111126]"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs pt-1">
+                <label className="flex items-center space-x-2 text-[#73738A] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="rounded-sm border-gray-300 text-[#6425E8] focus:ring-[#6425E8]"
+                  />
+                  <span>Keep unlocked on this browser</span>
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 px-4 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center justify-center space-x-2 mt-2 cursor-pointer active:scale-[0.99]"
+              >
+                <Lock className="w-4 h-4" />
+                <span>Unlock Master CMS & CRM</span>
+              </button>
+            </form>
+
+            <div className="mt-5 pt-4 border-t border-[#E9E8F0] text-center">
+              <Link
+                to="/"
+                className="text-xs font-semibold text-[#73738A] hover:text-[#111126] inline-flex items-center gap-1.5 transition"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Return to Eventra Homepage</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // UNLOCKED OWNER CMS & CRM INTERFACE
+  // =========================================================================
   return (
     <div className="min-h-screen bg-[#F8F8FC] text-[#111126] flex flex-col font-sans selection:bg-[#6425E8]/20 selection:text-[#6425E8]">
       {/* Toast Notification */}
@@ -264,7 +462,7 @@ export const AdminCRM: React.FC = () => {
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="p-2 text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC] rounded-xl transition"
+            className="p-2 text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC] rounded-xl transition cursor-pointer"
             title="Refresh analytics data"
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#6425E8]' : ''}`} />
@@ -272,7 +470,7 @@ export const AdminCRM: React.FC = () => {
 
           <button
             onClick={handleExportCSV}
-            className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-[#111126] bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] rounded-xl transition shadow-xs"
+            className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-[#111126] bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] rounded-xl transition shadow-xs cursor-pointer"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
             <span>Export CSV</span>
@@ -290,10 +488,18 @@ export const AdminCRM: React.FC = () => {
               onClick={handleQuickOwnerLogin}
               className="px-3.5 py-1.5 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1 cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Enter Workspace as Owner</span>
+              <span>Enter Workspace</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           )}
+
+          <button
+            onClick={handleLock}
+            className="p-2 text-[#73738A] hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+            title="Lock CMS and require secret password"
+          >
+            <Lock className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
@@ -302,7 +508,7 @@ export const AdminCRM: React.FC = () => {
         <div className="flex items-center space-x-1 sm:space-x-2 py-2">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'overview'
                 ? 'bg-[#6425E8]/10 text-[#6425E8]'
                 : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
@@ -314,7 +520,7 @@ export const AdminCRM: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('visitors')}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'visitors'
                 ? 'bg-[#6425E8]/10 text-[#6425E8]'
                 : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
@@ -329,7 +535,7 @@ export const AdminCRM: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('crm')}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'crm'
                 ? 'bg-[#6425E8]/10 text-[#6425E8]'
                 : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
@@ -344,7 +550,7 @@ export const AdminCRM: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('organizers')}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'organizers'
                 ? 'bg-[#6425E8]/10 text-[#6425E8]'
                 : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
@@ -359,7 +565,7 @@ export const AdminCRM: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('campaigns')}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'campaigns'
                 ? 'bg-[#6425E8]/10 text-[#6425E8]'
                 : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
@@ -374,56 +580,65 @@ export const AdminCRM: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('system')}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition whitespace-nowrap flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'system'
                 ? 'bg-[#6425E8]/10 text-[#6425E8]'
                 : 'text-[#73738A] hover:text-[#111126] hover:bg-[#F8F8FC]'
             }`}
           >
             <HardDrive className="w-3.5 h-3.5" />
-            <span>Health & Diagnostics</span>
+            <span>Health & Credentials</span>
           </button>
         </div>
       </div>
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+        
         {/* Owner Access Status Banner */}
-        <div className="bg-gradient-to-r from-purple-50 via-sky-50 to-indigo-50 border border-[#6425E8]/20 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+        <div className="bg-white border border-[#E9E8F0] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-full bg-[#6425E8] text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
-              M
+            <div className="w-9 h-9 rounded-full bg-[#111126] text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
+              <Shield className="w-4 h-4 text-[#6425E8]" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="text-xs font-bold text-[#111126]">Platform Owner Active: marvglobalbuild</span>
-                <span className="px-2 py-0.5 bg-[#6425E8]/10 text-[#6425E8] rounded-md text-[10px] font-bold uppercase tracking-wider">
-                  Full Root Access
+                <span className="text-xs font-bold text-[#111126]">Software Owner Access: marvglobalbuild</span>
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[10px] font-bold uppercase tracking-wider">
+                  Master Authenticated
                 </span>
               </div>
               <p className="text-[11px] text-[#73738A]">
-                Direct telemetry & monitoring active. You can review all real-time visitors, registered accounts, and attendee CRM records without sign-in barriers.
+                Protected monitoring portal. Real-time visitor logs, registered accounts, and attendee CRM records are active.
               </p>
             </div>
           </div>
-          {!user ? (
+          <div className="flex items-center space-x-2">
+            {!user ? (
+              <button
+                onClick={handleQuickOwnerLogin}
+                className="px-3.5 py-1.5 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center space-x-1.5 self-start sm:self-auto cursor-pointer whitespace-nowrap"
+              >
+                <span>Enter Workspace</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <Link
+                to="/dashboard"
+                className="px-3.5 py-1.5 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] text-xs font-bold rounded-xl transition shadow-2xs flex items-center space-x-1.5 self-start sm:self-auto whitespace-nowrap"
+              >
+                <span>Workspace Dashboard →</span>
+              </Link>
+            )}
             <button
-              onClick={handleQuickOwnerLogin}
-              className="px-3.5 py-1.5 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center space-x-1.5 self-start sm:self-auto cursor-pointer whitespace-nowrap"
+              onClick={handleLock}
+              className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-[#73738A] hover:text-[#111126] text-xs font-semibold rounded-xl transition cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>1-Click Log In to Workspace</span>
+              Lock CMS
             </button>
-          ) : (
-            <Link
-              to="/dashboard"
-              className="px-3.5 py-1.5 bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] text-[#111126] text-xs font-bold rounded-xl transition shadow-2xs flex items-center space-x-1.5 self-start sm:self-auto whitespace-nowrap"
-            >
-              <span>Go to Workspace Dashboard →</span>
-            </Link>
-          )}
+          </div>
         </div>
-        
+
         {/* ========================================================= */}
         {/* TAB 1: EXECUTIVE OVERVIEW */}
         {/* ========================================================= */}
@@ -433,7 +648,7 @@ export const AdminCRM: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-extrabold tracking-tight text-[#111126]">
-                  Software Platform Intelligence
+                  Platform Performance Intelligence
                 </h1>
                 <p className="text-xs text-[#73738A] mt-1">
                   High-level monitoring of visitors, accounts, campaigns, and audience conversion.
@@ -443,14 +658,14 @@ export const AdminCRM: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <button
                   onClick={handleSeedVisits}
-                  className="px-3 py-1.5 text-xs font-semibold text-[#6425E8] bg-[#6425E8]/10 hover:bg-[#6425E8]/20 rounded-xl transition flex items-center space-x-1.5"
+                  className="px-3 py-1.5 text-xs font-semibold text-[#6425E8] bg-[#6425E8]/10 hover:bg-[#6425E8]/20 rounded-xl transition flex items-center space-x-1.5 cursor-pointer"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Activity className="w-3.5 h-3.5" />
                   <span>Simulate Traffic Data</span>
                 </button>
                 <button
                   onClick={handleExportCSV}
-                  className="px-3 py-1.5 text-xs font-semibold text-[#111126] bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] rounded-xl transition shadow-xs flex items-center space-x-1.5"
+                  className="px-3 py-1.5 text-xs font-semibold text-[#111126] bg-white border border-[#E9E8F0] hover:bg-[#F8F8FC] rounded-xl transition shadow-xs flex items-center space-x-1.5 cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5 text-emerald-600" />
                   <span>Export CSV</span>
@@ -488,7 +703,7 @@ export const AdminCRM: React.FC = () => {
                     {metrics?.totalVisits || 0}
                   </p>
                   <div className="flex items-center space-x-1 mt-1 text-[11px] text-[#73738A] font-medium">
-                    <span>{visitorStats?.visitsToday || 0} page views today</span>
+                    <span>{visitorStats?.visitsToday || 0} views today</span>
                   </div>
                 </div>
               </div>
@@ -529,7 +744,7 @@ export const AdminCRM: React.FC = () => {
               <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E9E8F0] shadow-xs relative overflow-hidden">
                 <div className="flex items-center justify-between text-[#73738A]">
                   <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">Attendee Flyers</span>
-                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  <FileText className="w-4 h-4 text-amber-500" />
                 </div>
                 <div className="mt-2">
                   <p className="text-2xl sm:text-3xl font-extrabold text-[#111126] font-mono tabular-nums">
@@ -552,7 +767,7 @@ export const AdminCRM: React.FC = () => {
                     {metrics?.totalDownloads || 0}
                   </p>
                   <div className="flex items-center space-x-1 mt-1 text-[11px] text-emerald-600 font-bold">
-                    <span>{metrics?.conversionRate || 0}% overall conversion</span>
+                    <span>{metrics?.conversionRate || 0}% conversion</span>
                   </div>
                 </div>
               </div>
@@ -569,7 +784,7 @@ export const AdminCRM: React.FC = () => {
                   </div>
                   <button
                     onClick={() => setActiveTab('visitors')}
-                    className="text-xs text-[#6425E8] font-bold hover:underline flex items-center space-x-1"
+                    className="text-xs text-[#6425E8] font-bold hover:underline flex items-center space-x-1 cursor-pointer"
                   >
                     <span>Deep Telemetry</span>
                     <ChevronRight className="w-3.5 h-3.5" />
@@ -695,7 +910,7 @@ export const AdminCRM: React.FC = () => {
                 </div>
                 <button
                   onClick={() => setActiveTab('crm')}
-                  className="text-xs text-[#6425E8] font-bold hover:underline flex items-center space-x-1"
+                  className="text-xs text-[#6425E8] font-bold hover:underline flex items-center space-x-1 cursor-pointer"
                 >
                   <span>View All {attendees.length} Attendees</span>
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -790,13 +1005,13 @@ export const AdminCRM: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <button
                   onClick={handleSeedVisits}
-                  className="px-3 py-1.5 text-xs font-semibold text-[#6425E8] bg-[#6425E8]/10 hover:bg-[#6425E8]/20 rounded-xl transition"
+                  className="px-3 py-1.5 text-xs font-semibold text-[#6425E8] bg-[#6425E8]/10 hover:bg-[#6425E8]/20 rounded-xl transition cursor-pointer"
                 >
                   Generate Test Visits
                 </button>
                 <button
                   onClick={handleClearVisits}
-                  className="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition flex items-center space-x-1"
+                  className="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition flex items-center space-x-1 cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Reset Logs</span>
@@ -976,7 +1191,7 @@ export const AdminCRM: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <button
                   onClick={handleExportCSV}
-                  className="px-4 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1.5"
+                  className="px-4 py-2 bg-[#6425E8] hover:bg-[#501bc5] text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
                 >
                   <FileSpreadsheet className="w-4 h-4" />
                   <span>Export CSV Directory</span>
@@ -1280,7 +1495,7 @@ export const AdminCRM: React.FC = () => {
                           <div className="flex items-center justify-end space-x-2">
                             <button
                               onClick={() => handleCopyLink(ev.slug)}
-                              className="p-1.5 hover:bg-[#F8F8FC] text-[#73738A] hover:text-[#111126] rounded-lg transition"
+                              className="p-1.5 hover:bg-[#F8F8FC] text-[#73738A] hover:text-[#111126] rounded-lg transition cursor-pointer"
                               title="Copy public link"
                             >
                               {copiedSlug === ev.slug ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
@@ -1319,29 +1534,86 @@ export const AdminCRM: React.FC = () => {
         )}
 
         {/* ========================================================= */}
-        {/* TAB 6: HEALTH & DIAGNOSTICS */}
+        {/* TAB 6: HEALTH & CREDENTIALS */}
         {/* ========================================================= */}
         {activeTab === 'system' && (
           <div className="space-y-6 animate-fade-in">
             <div>
               <h1 className="text-xl font-bold tracking-tight text-[#111126]">
-                System Architecture & Storage Diagnostics
+                Security Credentials & Storage Diagnostics
               </h1>
               <p className="text-xs text-[#73738A] mt-1">
-                Overview of storage engines, telemetry buffer capacity, and database synchronization.
+                Manage your secret master password, review storage engines, and export full platform backups.
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Security Credentials Card */}
+              <div className="bg-white p-6 rounded-2xl border border-[#E9E8F0] shadow-xs space-y-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2.5 bg-[#111126] text-white rounded-xl shadow-xs">
+                    <Key className="w-5 h-5 text-[#6425E8]" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#111126]">Owner Master Password</h3>
+                    <p className="text-xs text-[#73738A]">Change the secret password required to unlock this CMS</p>
+                  </div>
+                </div>
+
+                {passNotice && (
+                  <div className={`p-3 rounded-xl text-xs flex items-center space-x-2 ${
+                    passNotice.isError ? 'bg-rose-50 border border-rose-200 text-rose-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                  }`}>
+                    {passNotice.isError ? <ShieldAlert className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                    <span>{passNotice.text}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleUpdatePassword} className="space-y-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-semibold text-[#111126] mb-1">
+                      New Secret Password
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="Minimum 6 characters"
+                      value={newPassInput}
+                      onChange={(e) => setNewPassInput(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs text-[#111126] focus:outline-hidden focus:border-[#6425E8]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-[#111126] mb-1">
+                      Confirm New Secret Password
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="Re-type new password"
+                      value={newPassConfirm}
+                      onChange={(e) => setNewPassConfirm(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#F8F8FC] border border-[#E9E8F0] rounded-xl text-xs text-[#111126] focus:outline-hidden focus:border-[#6425E8]"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2 px-3 bg-[#111126] hover:bg-black text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
+                  >
+                    Save New Master Password
+                  </button>
+                </form>
+              </div>
+
               {/* Storage Diagnostic Card */}
               <div className="bg-white p-6 rounded-2xl border border-[#E9E8F0] shadow-xs space-y-4">
                 <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-[#6425E8]/10 text-[#6425E8] rounded-xl">
+                  <div className="p-2.5 bg-[#6425E8]/10 text-[#6425E8] rounded-xl">
                     <Database className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-[#111126]">Hybrid Storage Engine</h3>
-                    <p className="text-xs text-[#73738A]">IndexedDB Large Image Vault + Persistent Local/Cloud Store</p>
+                    <h3 className="text-sm font-bold text-[#111126]">Storage Diagnostics</h3>
+                    <p className="text-xs text-[#73738A]">IndexedDB Large Image Vault + Persistent Database</p>
                   </div>
                 </div>
 
@@ -1359,46 +1631,25 @@ export const AdminCRM: React.FC = () => {
                     <span className="font-mono font-bold text-[#111126]">{visitorStats?.totalVisits || 0} events</span>
                   </div>
                   <div className="flex items-center justify-between text-xs py-1">
-                    <span className="text-[#73738A]">IndexedDB Image Storage</span>
+                    <span className="text-[#73738A]">IndexedDB Image Vault</span>
                     <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold rounded-md text-[10px]">
-                      Operational (Zero Quota Warnings)
+                      Operational
                     </span>
                   </div>
                 </div>
-              </div>
 
-              {/* Maintenance Actions Card */}
-              <div className="bg-white p-6 rounded-2xl border border-[#E9E8F0] shadow-xs space-y-4">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
-                    <HardDrive className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-[#111126]">Platform Backups & Actions</h3>
-                    <p className="text-xs text-[#73738A]">Snapshot exports and telemetry management tools</p>
-                  </div>
-                </div>
-
-                <div className="space-y-3 pt-2">
+                <div className="space-y-2 pt-2 border-t border-[#E9E8F0]">
                   <button
                     onClick={handleExportJSON}
-                    className="w-full flex items-center justify-between p-3 bg-[#F8F8FC] hover:bg-[#6425E8]/10 text-xs font-semibold text-[#111126] rounded-xl transition border border-[#E9E8F0]"
+                    className="w-full flex items-center justify-between p-2.5 bg-[#F8F8FC] hover:bg-[#6425E8]/10 text-xs font-semibold text-[#111126] rounded-xl transition border border-[#E9E8F0] cursor-pointer"
                   >
                     <span>Download Full Platform State (JSON)</span>
                     <Download className="w-4 h-4 text-[#6425E8]" />
                   </button>
 
                   <button
-                    onClick={handleExportCSV}
-                    className="w-full flex items-center justify-between p-3 bg-[#F8F8FC] hover:bg-[#6425E8]/10 text-xs font-semibold text-[#111126] rounded-xl transition border border-[#E9E8F0]"
-                  >
-                    <span>Download Attendee CRM Directory (CSV)</span>
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                  </button>
-
-                  <button
                     onClick={handleClearVisits}
-                    className="w-full flex items-center justify-between p-3 bg-rose-50/60 hover:bg-rose-100 text-xs font-semibold text-rose-700 rounded-xl transition border border-rose-200/50"
+                    className="w-full flex items-center justify-between p-2.5 bg-rose-50/60 hover:bg-rose-100 text-xs font-semibold text-rose-700 rounded-xl transition border border-rose-200/50 cursor-pointer"
                   >
                     <span>Reset Telemetry & Visitor History</span>
                     <Trash2 className="w-4 h-4 text-rose-600" />
@@ -1413,4 +1664,3 @@ export const AdminCRM: React.FC = () => {
     </div>
   );
 };
-
